@@ -78,6 +78,7 @@ class Learner:
         self.deployer = Deployer(self.db, self.data_dir / "jars", self.config, log=log)
         self.findsbot = findsbot.Sync(self.db, self.config.setdefault("findsBot", dict(DEFAULT_CONFIG["findsBot"])), log=log)
         self.views = {}  # bot -> its latest live view (kept in memory only)
+        self.eyes = {}   # bot -> {"v", "blocks", "pose", "at"}: what the bot sees, for the dashboard
         self.gridfly = gridfly.Sync(self.db, self.config.setdefault("gridfly", dict(DEFAULT_CONFIG["gridfly"])), log=log)
 
     # -- bot calls
@@ -216,6 +217,15 @@ def make_handler(learner, dashboard=None):
                     v["receivedAt"] = time.time()
                     learner.views[str(v.get("bot") or "unknown")] = v
                     return self._send(200, {"ok": True})
+                if self.path == "/api/eyes" and self._auth(cfg["botToken"]):
+                    m = self._body()
+                    e = learner.eyes.setdefault(str(m.get("bot") or "unknown"), {"v": -1, "blocks": None, "pose": None})
+                    if m.get("blocks") is not None:
+                        e["blocks"], e["v"] = m["blocks"], m.get("v", 0)
+                    if m.get("pose") is not None and m["pose"].get("v") == e["v"]:
+                        e["pose"] = m["pose"]
+                    e["at"] = time.time()
+                    return self._send(200, {"ok": True})
                 if self.path == "/api/event" and self._auth(cfg["botToken"]):
                     b = self._body()
                     learner.db.event(b.get("bot"), str(b.get("kind"))[:40], str(b.get("text"))[:500])
@@ -236,6 +246,9 @@ def make_handler(learner, dashboard=None):
                         return self._send(403, {"error": "the dashboard only answers this computer"})
                     if self.path in ("/", "/index.html"):
                         return self._send(200, dashboard.page(), "text/html; charset=utf-8")
+                    if self.path.startswith("/ui/eyes"):
+                        since = int((self.path.split("since=", 1) + ["-1"])[1] or -1) if "since=" in self.path else -1
+                        return self._send(200, dashboard.eyes(since))
                     if self.path.startswith("/ui/view"):
                         return self._send(200, dashboard.view())
                     if self.path.startswith("/ui/state"):

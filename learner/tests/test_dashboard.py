@@ -52,6 +52,15 @@ class DashboardTest(unittest.TestCase):
         self.learner.views["BotB"] = {"bot": "BotB", "x": 2, "receivedAt": 200}
         self.assertEqual(self.dash.view()["bot"], "BotB")
 
+    def test_eyes_sends_blocks_only_when_new(self):
+        self.assertTrue(self.dash.eyes()["waiting"])
+        self.learner.eyes["BotA"] = {"v": 3, "blocks": {"r": 1}, "pose": {"v": 3, "x": 0.5}, "at": 1}
+        first = self.dash.eyes(-1)
+        self.assertEqual(first["blocks"], {"r": 1})
+        again = self.dash.eyes(3)
+        self.assertNotIn("blocks", again)
+        self.assertEqual(again["pose"]["x"], 0.5)
+
     def test_state_and_target_buttons(self):
         tid = targets.add(self.learner.db, 10, 20, label="High priority - X10 Z20")
         s = self.dash.state()

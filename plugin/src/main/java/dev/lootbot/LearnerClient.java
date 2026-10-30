@@ -120,6 +120,11 @@ final class LearnerClient {
         post("/api/view", GSON.toJson(view));
     }
 
+    /** The bot's eyes: a pose, sometimes with the blocks around it. Best effort. */
+    void eyes(JsonObject msg) {
+        post("/api/eyes", GSON.toJson(msg));
+    }
+
     /** A short event the learner keeps in its log (a find, a problem). Best effort, never queued. */
     void event(String bot, String kind, String text) {
         JsonObject o = new JsonObject();

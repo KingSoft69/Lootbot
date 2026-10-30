@@ -2,482 +2,794 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#101316">
+<meta name="color-scheme" content="dark light">
+<script>try { const t = localStorage.getItem("lootbot.theme"); if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t); } catch (e) {}</script>
 <title>LootBot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap">
 <style>
-  :root {
-    --bg: #0f1214; --panel: #171b1f; --panel2: #1d2227; --line: #2a3138; --text: #e3e7ea; --dim: #8b959e;
-    --accent: #5fd38d; --accent-dim: #2e6b47; --warn: #e8b04b; --bad: #e0675f; --blue: #6aa8e8;
-    --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+:root {
+  --bg: #101316; --panel: #171b1f; --panel-2: #1e2429; --line: #2b333a;
+  --text: #ebe6da; --muted: #9aa39b; --faint: #67706a;
+  --teal: #e6a23c; --teal-ink: #1b1200; --amber: #ff9f5a; --green: #7cc47a; --red: #e4655c; --blue: #7ab7e0; --purple: #b79ae0;
+  --chip: #232a30;
+  --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --display: "Barlow Condensed", "Arial Narrow", "Roboto Condensed", system-ui, sans-serif;
+  --r: 3px;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #ece9e1; --panel: #f7f5ef; --panel-2: #e6e2d8; --line: #cfc9bb; --text: #1c2024; --muted: #5f6762; --faint: #8d948e;
+    --teal: #a8651a; --teal-ink: #ffffff; --amber: #b5551e; --green: #2f7d3a; --red: #b8382f; --blue: #2b6f9e; --purple: #6f4fb0; --chip: #e1ddd2;
+    color-scheme: light;
   }
-  * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, "Segoe UI", sans-serif; }
-  header { display: flex; align-items: center; gap: 14px; padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 2; flex-wrap: wrap; }
-  header h1 { font-size: 17px; margin: 0 10px 0 0; letter-spacing: .3px; }
-  header h1 span { color: var(--accent); }
-  .pill { display: inline-flex; align-items: center; gap: 7px; padding: 4px 10px; border-radius: 999px; background: var(--panel2); border: 1px solid var(--line); font-size: 12.5px; color: var(--dim); }
-  .pill b { color: var(--text); font-weight: 600; }
-  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); }
-  .dot.on { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
-  .dot.warn { background: var(--warn); } .dot.bad { background: var(--bad); }
-  main { display: grid; grid-template-columns: 340px 1fr; gap: 16px; padding: 16px 20px 40px; max-width: 1500px; margin: 0 auto; }
-  @media (max-width: 980px) { main { grid-template-columns: 1fr; } }
-  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
-  .card h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--dim); margin: 0 0 10px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
-  .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .btns.one { grid-template-columns: 1fr; }
-  button { font: inherit; color: var(--text); background: var(--panel2); border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; cursor: pointer; text-align: left; }
-  button:hover:not(:disabled) { border-color: #3c4650; background: #222830; }
-  button:disabled { opacity: .45; cursor: default; }
-  button.go { background: var(--accent-dim); border-color: #3f8a5e; }
-  button.go:hover:not(:disabled) { background: #367a52; }
-  button.stop { border-color: #6b3a36; }
-  button small { display: block; color: var(--dim); font-size: 11.5px; margin-top: 1px; }
-  button.mini { padding: 3px 8px; font-size: 12px; }
-  .label { font-size: 11.5px; color: var(--dim); margin: 12px 0 6px; }
-  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
-  @media (max-width: 700px) { .tiles { grid-template-columns: repeat(2, 1fr); } }
-  .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
-  .tile .v { font-size: 24px; font-weight: 650; font-variant-numeric: tabular-nums; }
-  .tile .k { font-size: 12px; color: var(--dim); }
-  #console { height: 330px; overflow-y: auto; background: #0b0d0f; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: 12.5px/1.45 var(--mono); white-space: pre-wrap; word-break: break-word; }
-  #console .me { color: var(--blue); } #console .sys { color: var(--warn); } #console .loot { color: var(--accent); }
-  .cmdrow { display: flex; gap: 8px; margin-top: 8px; }
-  input { font: inherit; color: var(--text); background: #0b0d0f; border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; flex: 1; min-width: 0; }
-  input:focus, button:focus-visible { outline: 2px solid var(--accent-dim); outline-offset: 1px; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th { text-align: left; color: var(--dim); font-weight: 500; font-size: 12px; padding: 4px 8px 6px; border-bottom: 1px solid var(--line); }
-  td { padding: 6px 8px; border-bottom: 1px solid #20262b; vertical-align: top; }
-  td.num { font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 12.5px; }
-  .tag { display: inline-block; padding: 1px 7px; border-radius: 5px; font-size: 11.5px; background: var(--panel2); border: 1px solid var(--line); color: var(--dim); }
-  .tag.high { color: #ff8b80; border-color: #6b3a36; } .tag.moderate { color: var(--warn); border-color: #6b5530; } .tag.low { color: var(--accent); border-color: var(--accent-dim); }
-  .tag.on { color: var(--blue); border-color: #345a80; }
-  .muted { color: var(--dim); }
-  .scroll { max-height: 360px; overflow-y: auto; }
-  .ev { padding: 5px 0; border-bottom: 1px solid #20262b; font-size: 13px; }
-  .ev .muted { font-size: 12px; }
-  .steps { margin: 0; padding-left: 18px; color: var(--dim); font-size: 13px; }
-  .steps li { margin-bottom: 5px; } .steps b { color: var(--text); font-weight: 600; }
-  details summary { cursor: pointer; color: var(--dim); font-size: 12px; text-transform: uppercase; letter-spacing: .8px; font-weight: 600; }
-  #toast { position: fixed; bottom: 18px; right: 18px; background: var(--panel2); border: 1px solid var(--line); padding: 9px 14px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: 420px; }
-  #toast.show { opacity: 1; }
-  .kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: 12.5px; }
-  .kv span:nth-child(odd) { color: var(--dim); }
-  .addrow { display: flex; gap: 6px; margin-top: 10px; }
-  .addrow input { padding: 6px 8px; font-size: 13px; }
-  .live { display: grid; grid-template-columns: minmax(0, 1fr) 230px; gap: 14px; }
-  @media (max-width: 1100px) { .live { grid-template-columns: 1fr; } }
-  .mapwrap { position: relative; background: #0b0d0f; border: 1px solid var(--line); border-radius: 8px; aspect-ratio: 1; max-height: 560px; width: 100%; overflow: hidden; }
-  #map { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
-  .mapmsg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; color: var(--dim); padding: 30px; font-size: 13px; }
-  .zoom { display: flex; gap: 4px; }
-  .facts { font-size: 13px; }
-  .facts div { padding: 5px 0; border-bottom: 1px solid #20262b; }
-  .facts span { color: var(--dim); display: block; font-size: 11.5px; }
-  .legend { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 11.5px; color: var(--dim); margin-top: 8px; }
-  .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+}
+:root[data-theme="light"] {
+  --bg: #ece9e1; --panel: #f7f5ef; --panel-2: #e6e2d8; --line: #cfc9bb; --text: #1c2024; --muted: #5f6762; --faint: #8d948e;
+  --teal: #a8651a; --teal-ink: #ffffff; --amber: #b5551e; --green: #2f7d3a; --red: #b8382f; --blue: #2b6f9e; --purple: #6f4fb0; --chip: #e1ddd2;
+  color-scheme: light;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); }
+body { font: 15px/1.4 var(--sans); -webkit-text-size-adjust: 100%; min-height: 100vh; }
+button, input, select { font: inherit; color: inherit; }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.hidden { display: none !important; }
+.wrap { max-width: 1440px; margin: 0 auto; padding: 0 16px 40px; }
+
+header { position: sticky; top: 0; z-index: 5; box-shadow: inset 0 -2px 0 var(--teal);
+  background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
+.head { max-width: 1440px; margin: 0 auto; padding: 12px 16px 10px; display: flex; align-items: center; gap: 10px; }
+.brand { min-width: 0; flex: 1; }
+.brand h1 { font: 700 21px/1 var(--display); text-transform: uppercase; letter-spacing: .6px; margin: 0; white-space: nowrap; }
+.brand .sub { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 2px; font-size: 12px; background: var(--chip); color: var(--muted); white-space: nowrap; }
+.pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--faint); }
+.pill.live .dot { background: var(--green); box-shadow: 0 0 0 3px color-mix(in srgb, var(--green) 25%, transparent); }
+.pill.live, .pill.busy { color: var(--text); }
+.pill.busy .dot { background: var(--teal); box-shadow: 0 0 0 3px color-mix(in srgb, var(--teal) 25%, transparent); }
+.pill.warn .dot { background: var(--amber); animation: blink 1s infinite; }
+.pill.down .dot { background: var(--red); }
+@keyframes blink { 50% { opacity: .3; } }
+.iconbtn { background: none; border: 1px solid var(--line); border-radius: var(--r); width: 36px; height: 36px; display: grid; place-items: center; cursor: pointer; color: var(--muted); flex: none; }
+.iconbtn:active { background: var(--panel-2); }
+.tabs { max-width: 1440px; margin: 0 auto; padding: 0 16px; display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tab { flex: 1; background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted); padding: 9px 6px 8px; font: 600 17px/1.2 var(--display);
+  text-transform: uppercase; letter-spacing: .9px; cursor: pointer; white-space: nowrap; }
+.tab.on { color: var(--text); border-bottom-color: var(--teal); }
+.tab .c { font-family: var(--mono); font-weight: 500; color: var(--faint); margin-left: 4px; font-size: 13px; }
+
+.stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin: 14px 0 10px; }
+.stat { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 10px 8px 8px; min-width: 0; }
+.stat .n { font: 600 26px/1 var(--display); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stat .l { font: 600 12px/1 var(--display); color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stat.hot .n { color: var(--teal); } .stat.amber .n { color: var(--amber); } .stat.good .n { color: var(--green); } .stat.bad .n { color: var(--red); }
+@media (max-width: 560px) { .stats { grid-template-columns: repeat(3, 1fr); } .stat .n { font-size: 22px; } }
+
+h2 { font: 600 15px/1 var(--display); text-transform: uppercase; letter-spacing: 1.2px; color: var(--muted); margin: 22px 0 8px; display: flex; align-items: center; gap: 8px; }
+h2 .link, .link { margin-left: auto; text-transform: none; letter-spacing: 0; font: 12px var(--sans); color: var(--teal); background: none; border: none; cursor: pointer; padding: 0; }
+
+.grid { display: grid; gap: 10px; }
+@media (min-width: 720px) { .grid.two { grid-template-columns: 1fr 1fr; } .grid.three { grid-template-columns: repeat(3, 1fr); } }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; position: relative; overflow: hidden; min-width: 0; }
+.card::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--faint); }
+.card.k-go::before { background: var(--teal); } .card.k-ok::before { background: var(--green); } .card.k-warn::before { background: var(--amber); } .card.k-bad::before { background: var(--red); }
+.row1 { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.name { font-weight: 650; font-size: 16px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.state { font: 700 12px/1 var(--display); letter-spacing: 1px; text-transform: uppercase; padding: 5px 7px; border-radius: 2px; background: var(--chip); color: var(--muted); flex: none; margin-left: auto; }
+.state.go { background: var(--teal); color: var(--teal-ink); }
+.state.ok { background: color-mix(in srgb, var(--green) 20%, transparent); color: var(--green); }
+.state.bad { background: color-mix(in srgb, var(--red) 20%, transparent); color: var(--red); }
+.state.warn { background: color-mix(in srgb, var(--amber) 22%, transparent); color: var(--amber); }
+.muted { color: var(--muted); } .faint { color: var(--faint); } .small { font-size: 12.5px; }
+.bar { height: 5px; border-radius: 3px; background: var(--chip); overflow: hidden; margin-top: 8px; }
+.bar > i { display: block; height: 100%; background: var(--teal); border-radius: 3px; transition: width .4s; }
+.lines { list-style: none; margin: 0; padding: 0; }
+.lines li { display: flex; gap: 10px; align-items: baseline; padding: 7px 0; border-top: 1px solid var(--line); min-width: 0; }
+.lines li:first-child { border-top: none; }
+.lines .grow { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.empty { color: var(--faint); padding: 14px 0; text-align: center; font-size: 13px; }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 5px 14px; margin: 0; font-size: 14px; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 12px; }
+.frow { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.frow > * { min-width: 0; }
+.inp, .sel { background: var(--bg); border: 1px solid var(--line); border-radius: var(--r); padding: 8px 10px; font-size: 14px; }
+.inp:focus, .sel:focus { outline: 2px solid var(--teal); outline-offset: -1px; }
+.inp.grow { flex: 1; min-width: 160px; }
+.inp.num { width: 110px; font-family: var(--mono); }
+.btn { border: 1px solid var(--line); background: var(--panel-2); border-radius: var(--r); padding: 8px 12px; font-size: 14px; cursor: pointer; white-space: nowrap; }
+.btn.go { background: var(--teal); border-color: var(--teal); color: var(--teal-ink); font: 700 16px/1.2 var(--display); text-transform: uppercase; letter-spacing: .8px; }
+.btn.sm { padding: 3px 8px; font-size: 12px; }
+.btn:active { filter: brightness(.92); }
+.btn:disabled, .act:disabled { opacity: .45; cursor: default; }
+:focus-visible { outline: 2px solid var(--teal); outline-offset: 1px; }
+.tblwrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); -webkit-overflow-scrolling: touch; }
+table.tbl { border-collapse: collapse; width: 100%; font-size: 13px; white-space: nowrap; }
+.tbl th, .tbl td { padding: 7px 10px; border-bottom: 1px solid var(--line); text-align: left; }
+.tbl th { font: 600 13px/1 var(--display); text-transform: uppercase; letter-spacing: 1px; color: var(--muted); position: sticky; top: 0; background: var(--panel-2); }
+.tbl th.r, .tbl td.r { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.tbl td.wrap { white-space: normal; min-width: 200px; }
+.tbl tbody tr:hover td { background: var(--panel-2); }
+.tag { font-size: 11px; padding: 2px 6px; border-radius: 2px; background: var(--chip); color: var(--muted); white-space: nowrap; }
+.tag.high { color: var(--red); background: color-mix(in srgb, var(--red) 16%, transparent); }
+.tag.moderate { color: var(--amber); background: color-mix(in srgb, var(--amber) 16%, transparent); }
+.tag.low { color: var(--green); background: color-mix(in srgb, var(--green) 16%, transparent); }
+.tag.on { color: var(--teal); background: color-mix(in srgb, var(--teal) 16%, transparent); }
+
+.acts { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; margin-top: 14px; }
+.act { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; text-align: left; background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--teal); border-radius: var(--r); padding: 12px 14px; cursor: pointer; color: var(--text); min-width: 0; }
+.act b { font: 700 18px/1.15 var(--display); text-transform: uppercase; letter-spacing: .6px; }
+.act span { font-size: 12.5px; color: var(--muted); }
+.act:hover:not(:disabled) { background: var(--panel-2); }
+.act.stop { border-left-color: var(--red); }
+.act.blue { border-left-color: var(--blue); }
+
+.livebox { position: relative; margin-top: 14px; border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; background: #8fb8e8; aspect-ratio: 16 / 9; max-height: 74vh; width: 100%; }
+.livebox canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; }
+.livehud { position: absolute; top: 8px; left: 8px; right: 8px; display: flex; justify-content: space-between; align-items: center; gap: 8px; pointer-events: none; }
+.livehud .seg { pointer-events: auto; opacity: .92; }
+.livedot { width: 10px; height: 10px; border-radius: 50%; background: var(--faint); box-shadow: 0 0 0 2px rgba(0,0,0,.35); }
+.livedot.on { background: #52d273; }
+.livestep { position: absolute; left: 8px; bottom: 8px; right: 8px; color: #fff; font: 600 13px/1.3 var(--mono); text-shadow: 0 1px 2px #000, 0 0 6px #000; pointer-events: none; }
+.livemsg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 15px; background: rgba(16,19,22,.55); text-align: center; padding: 16px; }
+.livemsg:empty { display: none; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; flex: none; }
+.seg button { background: var(--panel); border: none; padding: 7px 11px; font-size: 13px; color: var(--muted); cursor: pointer; }
+.seg button.on { background: var(--teal); color: var(--teal-ink); font-weight: 600; }
+
+.mapgrid { display: grid; gap: 10px; margin-top: 14px; }
+@media (min-width: 900px) { .mapgrid { grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr); align-items: start; } }
+.mapbox { position: relative; border: 1px solid var(--line); border-radius: var(--r); background: #0b0f14; overflow: hidden; aspect-ratio: 1; width: 100%; max-height: 72vh; }
+.mapbox canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+.maplegend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+.maplegend span { display: inline-flex; align-items: center; gap: 6px; }
+.lg { width: 11px; height: 11px; border-radius: 2px; background: var(--kc); display: inline-block; }
+.lg.ring { background: none; box-shadow: inset 0 0 0 2px var(--kc); }
+.lg.dot { border-radius: 50%; }
+
+.console { height: min(60vh, 560px); overflow-y: auto; background: var(--bg); border: 1px solid var(--line); border-radius: var(--r); padding: 8px 10px; font: 12.5px/1.5 var(--mono); white-space: pre-wrap; word-break: break-word; }
+.console .me { color: var(--blue); } .console .sys { color: var(--amber); } .console .loot { color: var(--teal); }
+.log { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 8px 10px; font: 12px/1.5 var(--mono); max-height: 360px; overflow-y: auto; }
+.logl { display: grid; grid-template-columns: 70px 1fr; gap: 0 8px; padding: 2px 0; }
+.logl .tm { color: var(--faint); }
+.logl .src { color: var(--teal); margin-right: 6px; }
+.steps { margin: 0; padding-left: 20px; color: var(--muted); font-size: 14px; }
+.steps li { margin-bottom: 7px; } .steps b { color: var(--text); }
+.toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--text); color: var(--bg); padding: 8px 14px; border-radius: var(--r); font-size: 13px; z-index: 40; opacity: 0; transition: opacity .2s; pointer-events: none; }
+.toast.on { opacity: 1; }
+@media (min-width: 900px) {
+  .wrap, .head, .tabs { max-width: none; padding-left: 24px; padding-right: 24px; }
+  .tabs { justify-content: flex-start; }
+  .tab { flex: 0 0 auto; padding: 10px 22px 9px; }
+  .stats { grid-template-columns: repeat(5, minmax(0, 220px)); }
+}
 </style>
 </head>
 <body>
 <header>
-  <h1>Loot<span>Bot</span></h1>
-  <span class="pill"><span class="dot" id="pxDot"></span>Proxy <b id="pxText">…</b></span>
-  <span class="pill"><span class="dot" id="botDot"></span>Bot <b id="botText">not seen yet</b></span>
-  <span class="pill"><span class="dot" id="srcDot"></span>Finds <b id="srcText">…</b></span>
-  <span class="pill">Version <b id="verText">–</b></span>
+  <div class="head">
+    <div class="brand"><h1>LootBot</h1><div class="sub" id="sub">starting…</div></div>
+    <span class="pill warn" id="pill"><span class="dot"></span><span id="pillText">Connecting</span></span>
+    <button class="iconbtn" id="themeBtn" title="Light / dark" aria-label="Switch theme">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a9 9 0 1 0 9 9c0-.5 0-1-.1-1.4A5.5 5.5 0 0 1 13.4 3.1C13 3 12.5 3 12 3z"/></svg>
+    </button>
+  </div>
+  <nav class="tabs" id="tabs">
+    <button class="tab on" data-tab="bot">Bot</button>
+    <button class="tab" data-tab="live">Live</button>
+    <button class="tab" data-tab="map">Map</button>
+    <button class="tab" data-tab="targets">Targets<span class="c" id="cTgt"></span></button>
+    <button class="tab" data-tab="visits">Visits<span class="c" id="cVis"></span></button>
+    <button class="tab" data-tab="console">Console</button>
+    <button class="tab" data-tab="setup">Setup</button>
+  </nav>
 </header>
 
-<main>
-  <div>
-    <div class="card">
-      <h2>Proxy</h2>
-      <div class="btns">
-        <button class="go" id="startPx" onclick="post('/ui/zenith/start')">Start<small>ZenithProxy</small></button>
-        <button class="stop" id="stopPx" onclick="post('/ui/zenith/stop')">Stop<small>shuts it down</small></button>
+<main class="wrap">
+
+  <div id="t-bot">
+    <div class="acts">
+      <button class="act" data-cmd="loot start" data-need="run"><b>Start looting</b><span>Takes targets from Discord</span></button>
+      <button class="act stop" data-cmd="loot stop" data-need="run"><b>Stop looting</b><span>Stays logged in</span></button>
+      <button class="act blue" data-cmd="loot status" data-need="run"><b>Status</b><span>Answer shows in the console</span></button>
+      <button class="act blue" data-post="/ui/finds/sync"><b>Sync finds</b><span>Pull Discord finds now</span></button>
+      <button class="act" id="pxStart" data-post="/ui/zenith/start"><b>Start proxy</b><span>ZenithProxy</span></button>
+      <button class="act stop" id="pxStop" data-post="/ui/zenith/stop"><b>Stop proxy</b><span>Shuts it down</span></button>
+    </div>
+    <div class="stats" style="margin-top:14px">
+      <div class="stat hot"><div class="n" id="sDoing">–</div><div class="l">Now</div></div>
+      <div class="stat good"><div class="n" id="sVisits">0</div><div class="l">Visits (24 h)</div></div>
+      <div class="stat"><div class="n" id="sPoints">0</div><div class="l">Loot points (24 h)</div></div>
+      <div class="stat amber"><div class="n" id="sWaiting">0</div><div class="l">Targets waiting</div></div>
+      <div class="stat bad"><div class="n" id="sDeaths">0</div><div class="l">Deaths (24 h)</div></div>
+    </div>
+    <div class="grid two">
+      <div class="card k-go" id="nowCard">
+        <div class="row1"><span class="name" id="nowWhat">Idle</span><span class="state" id="nowState">Off</span></div>
+        <div class="muted small" id="nowStep" style="margin-top:6px"></div>
+        <div id="nowProgWrap" hidden><div class="bar"><i id="nowBar"></i></div><div class="frow small muted" style="justify-content:space-between;margin-top:5px"><span id="nowProgText"></span><span class="mono" id="nowDist"></span></div></div>
+        <div class="small" id="nowLoot" style="margin-top:8px"></div>
       </div>
-      <div class="label">Account</div>
-      <div class="btns one">
-        <button data-cmd="connect">Log in / connect<small>first time: shows a code for microsoft.com/link</small></button>
+      <div class="card" id="botCard">
+        <div class="row1"><span class="name" id="botName">Bot</span><span class="state" id="botState">Not seen</span></div>
+        <dl class="kv small" id="botKv" style="margin-top:8px"></dl>
       </div>
     </div>
+    <h2>Latest visits <button class="link" data-goto="visits">All</button></h2>
+    <div class="card"><ul class="lines" id="latest"></ul></div>
+  </div>
 
-    <div class="card">
-      <h2>Looting</h2>
-      <div class="btns">
-        <button class="go" data-cmd="loot start">Start looting<small>takes targets</small></button>
-        <button class="stop" data-cmd="loot stop">Stop looting<small>stays logged in</small></button>
-        <button data-cmd="loot kit">Save kit<small>what it carries now</small></button>
-        <button data-cmd="loot home here">Set home here<small>unload spot</small></button>
-        <button data-cmd="loot status">Status<small>in the console</small></button>
-        <button onclick="post('/ui/finds/sync')">Sync finds<small>from Discord now</small></button>
+  <div id="t-live" class="hidden">
+    <div class="livebox" id="liveBox">
+      <canvas id="liveCanvas"></canvas>
+      <div class="livehud">
+        <div class="seg" id="liveSeg"><button data-lm="eyes" class="on">Bot's eyes</button><button data-lm="behind">Behind</button><button data-lm="orbit">Orbit</button><button data-lm="top">Above</button></div>
+        <span class="livedot" id="liveDot"></span>
       </div>
+      <div class="livestep" id="liveStep"></div>
+      <div class="livemsg" id="liveMsg">Starting the view…</div>
     </div>
+    <div class="muted small" style="margin-top:8px">What the bot sees, rebuilt from the blocks it has loaded, about 20 blocks around it. Drag to look around (Orbit), scroll to zoom. For the real thing with textures, use Join to watch on the Setup tab and spectate it in Minecraft.</div>
+  </div>
 
-    <div class="card">
-      <h2>Bot's eyes</h2>
-      <div class="muted" style="font-size:12.5px;margin-bottom:8px">Join localhost in Minecraft as a spectator and see exactly what the bot sees, while it keeps working.</div>
-      <div class="cmdrow" style="margin:0 0 8px">
-        <input id="mcName" placeholder="Your Minecraft name" autocomplete="off">
+  <div id="t-map" class="hidden">
+    <div class="mapgrid">
+      <div class="panel">
+        <div class="frow" style="justify-content:space-between"><div class="seg" id="zoomSeg"><button data-z="1" class="on">1x</button><button data-z="1.6">2x</button><button data-z="2.6">3x</button></div><span class="faint small" id="mapAge"></span></div>
+        <div class="mapbox" style="margin-top:10px"><canvas id="map" width="720" height="720"></canvas></div>
+        <div class="maplegend"><span><i class="lg dot" style="--kc:#fff"></i>Bot</span><span><i class="lg dot" style="--kc:var(--red)"></i>Player</span><span><i class="lg ring" style="--kc:var(--teal)"></i>To loot</span><span><i class="lg ring" style="--kc:var(--blue)"></i>Opening</span><span><i class="lg ring" style="--kc:var(--green)"></i>Done</span><span><i class="lg dot" style="--kc:var(--purple)"></i>Target</span><span><i class="lg dot" style="--kc:var(--blue)"></i>Home</span></div>
       </div>
-      <div class="btns">
-        <button class="go" id="watchBtn" onclick="watchMode(true)">Join to watch<small>spectate as the bot</small></button>
-        <button id="controlBtn" onclick="watchMode(false)">Join to control<small>for gear, kit, home</small></button>
-      </div>
-      <div class="muted" id="watchNote" style="font-size:12px;margin-top:8px"></div>
-    </div>
-
-    <div class="card">
-      <details id="firstTime">
-        <summary>First time</summary>
-        <ol class="steps" style="margin-top:10px">
-          <li><b>Start</b> the proxy, then <b>Log in</b> and follow the code in the console.</li>
-          <li>Join <b>localhost</b> in Minecraft. Give the bot its gear (elytra, rockets, food, pickaxe, totems) and stand it next to empty chests or barrels.</li>
-          <li><b>Save kit</b>, then <b>Set home here</b>.</li>
-          <li>Disconnect from the proxy (the bot only works while nobody controls it) and press <b>Start looting</b>.</li>
-          <li>To watch it work, put in your Minecraft name, press <b>Join to watch</b> and join localhost again.</li>
-        </ol>
-      </details>
-    </div>
-
-    <div class="card">
-      <h2>Best settings so far</h2>
-      <div class="kv" id="best"></div>
+      <div class="card"><div class="name">Around the bot</div><dl class="kv small" id="facts" style="margin-top:8px"></dl></div>
     </div>
   </div>
 
-  <div>
-    <div class="tiles">
-      <div class="tile"><div class="v" id="tEp">0</div><div class="k">targets visited (24 h)</div></div>
-      <div class="tile"><div class="v" id="tPts">0</div><div class="k">loot points (24 h)</div></div>
-      <div class="tile"><div class="v" id="tOpen">0</div><div class="k">targets waiting</div></div>
-      <div class="tile"><div class="v" id="tDeaths">0</div><div class="k">deaths (24 h)</div></div>
+  <div id="t-targets" class="hidden">
+    <div class="panel" style="margin-top:14px">
+      <div class="frow">
+        <input class="inp num" id="addX" placeholder="X" inputmode="numeric">
+        <input class="inp num" id="addZ" placeholder="Z" inputmode="numeric">
+        <input class="inp grow" id="addLabel" placeholder="Label (optional)">
+        <button class="btn go" id="addGo">Add target</button>
+      </div>
+      <div class="muted small" style="margin-top:8px" id="tgtCounts"></div>
     </div>
+    <div class="tblwrap" style="margin-top:10px"><table class="tbl"><thead><tr><th>Priority</th><th>Find</th><th class="r">X</th><th class="r">Z</th><th class="r">Distance</th><th class="r">Tries</th><th>State</th><th></th></tr></thead><tbody id="tgts"></tbody></table></div>
+  </div>
 
-    <div class="card">
-      <h2>Live map <span class="zoom"><button class="mini" data-zoom="1">1x</button><button class="mini" data-zoom="1.6">2x</button><button class="mini" data-zoom="2.6">3x</button></span></h2>
-      <div class="live">
-        <div class="mapwrap"><canvas id="map" width="720" height="720"></canvas><div class="mapmsg" id="mapMsg">No live view yet. It appears once the bot is in game with LootBot loaded.</div></div>
-        <div class="facts" id="facts"></div>
-      </div>
-      <div class="legend">
-        <span><i style="background:#fff"></i>bot</span><span><i style="background:#ff5a4f"></i>player</span>
-        <span><i style="background:#e8b04b"></i>container to do</span><span><i style="background:#6aa8e8"></i>opening now</span>
-        <span><i style="background:#5fd38d"></i>done</span><span><i style="background:#c77dff"></i>target / goal</span><span><i style="background:#9ad1ff"></i>home</span>
-      </div>
-    </div>
+  <div id="t-visits" class="hidden">
+    <div class="tblwrap" style="margin-top:14px"><table class="tbl"><thead><tr><th>When</th><th>Bot</th><th class="r">Target</th><th>Outcome</th><th class="r">Points</th><th class="r">Took</th><th>Taken</th></tr></thead><tbody id="eps"></tbody></table></div>
+    <h2>Log</h2>
+    <div class="log" id="events"></div>
+  </div>
 
-    <div class="card">
-      <h2>Console <span class="muted" id="conInfo"></span></h2>
-      <div id="console"></div>
-      <div class="cmdrow">
-        <input id="cmd" placeholder="Type a ZenithProxy command (e.g. loot status, help) and press Enter" autocomplete="off">
-        <button class="go" onclick="sendCmd()">Send</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>Targets <span class="muted" id="tgtCounts"></span></h2>
-      <div class="scroll">
-        <table>
-          <thead><tr><th>Find</th><th>Coords</th><th>Distance</th><th>Tries</th><th>State</th><th></th></tr></thead>
-          <tbody id="tgts"></tbody>
-        </table>
-      </div>
-      <div class="addrow">
-        <input id="addX" placeholder="X" inputmode="numeric" style="max-width:110px">
-        <input id="addZ" placeholder="Z" inputmode="numeric" style="max-width:110px">
-        <input id="addLabel" placeholder="label (optional)">
-        <button onclick="addTarget()">Add target</button>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>Recent visits</h2>
-      <div class="scroll">
-        <table>
-          <thead><tr><th>When</th><th>Target</th><th>Result</th><th>Points</th><th>Taken</th></tr></thead>
-          <tbody id="eps"></tbody>
-        </table>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>Log</h2>
-      <div class="scroll" id="events"></div>
+  <div id="t-console" class="hidden">
+    <div class="console" id="console" style="margin-top:14px"></div>
+    <div class="frow" style="margin-top:8px">
+      <input class="inp grow" id="cmd" placeholder="A ZenithProxy command: loot status, help, connect…" autocomplete="off">
+      <button class="btn go" id="cmdGo">Send</button>
     </div>
   </div>
+
+  <div id="t-setup" class="hidden">
+    <h2>First time</h2>
+    <div class="card k-go"><ol class="steps">
+      <li><b>Start proxy</b>, then <b>Log in</b> and follow the code in the console (microsoft.com/link).</li>
+      <li>Join <b>localhost</b> in Minecraft. Give the bot its gear (elytra, rockets, food, pickaxe, totems) and stand it next to empty chests or barrels.</li>
+      <li><b>Save kit</b>, then <b>Set home here</b>.</li>
+      <li>Disconnect (the bot only works while nobody controls it) and press <b>Start looting</b> on the Bot tab.</li>
+    </ol></div>
+    <div class="acts">
+      <button class="act" data-cmd="connect" data-need="run"><b>Log in</b><span>Shows a code for microsoft.com/link</span></button>
+      <button class="act" data-cmd="loot kit" data-need="run"><b>Save kit</b><span>What it carries now is its gear</span></button>
+      <button class="act" data-cmd="loot home here" data-need="run"><b>Set home here</b><span>Unloads into chests within 8 blocks</span></button>
+    </div>
+    <h2>Watch it in Minecraft</h2>
+    <div class="panel">
+      <div class="frow"><input class="inp grow" id="mcName" placeholder="Your Minecraft name" autocomplete="off">
+        <button class="btn go" id="watchBtn">Join to watch</button><button class="btn" id="controlBtn">Join to control</button></div>
+      <div class="muted small" style="margin-top:8px" id="watchNote">Join to watch: joining localhost puts you inside the bot's view as a spectator, and it keeps looting. Join to control: joining takes over (for gear and kit).</div>
+    </div>
+    <div class="grid two" style="margin-top:10px">
+      <div class="card"><div class="name">Best settings so far</div><dl class="kv small" id="best" style="margin-top:8px"></dl></div>
+      <div class="card"><div class="name">Sources</div><dl class="kv small" id="sources" style="margin-top:8px"></dl></div>
+    </div>
+  </div>
+
 </main>
-<div id="toast"></div>
+<div class="toast" id="toast"></div>
 
 <script>
-let after = 0, botPos = null, firstState = true;
-const $ = id => document.getElementById(id);
-const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-function ago(s) {
-  if (s < 60) return s + " s";
-  if (s < 3600) return Math.round(s / 60) + " min";
-  if (s < 86400) return Math.round(s / 3600) + " h";
-  return Math.round(s / 86400) + " d";
-}
-function toast(msg) {
-  const t = $("toast"); t.textContent = msg; t.classList.add("show");
-  clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.remove("show"), 3500);
-}
-async function post(path, body) {
-  try {
-    const r = await fetch(path, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body || {})});
-    const j = await r.json();
-    toast(j.msg || j.error || "done");
-  } catch (e) { toast("The learner is not answering"); }
-  refresh();
-}
-function sendCmd(text) {
-  const c = text ?? $("cmd").value;
-  if (!c.trim()) return;
-  post("/ui/zenith/cmd", {cmd: c});
-  if (text === undefined) $("cmd").value = "";
-}
-$("cmd").addEventListener("keydown", e => { if (e.key === "Enter") sendCmd(); });
-document.querySelectorAll("[data-cmd]").forEach(b => b.addEventListener("click", () => sendCmd(b.dataset.cmd)));
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-try { $("mcName").value = localStorage.getItem("mcName") || ""; } catch (e) { }
-async function cmdSeq(list) {
-  for (const c of list) {
-    await fetch("/ui/zenith/cmd", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({cmd: c})});
-    await sleep(400);
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const num = (n) => Number(n || 0).toLocaleString("en-US");
+  const ago = (s) => s < 60 ? Math.round(s) + " s" : s < 3600 ? Math.round(s / 60) + " min" : s < 86400 ? Math.round(s / 3600) + " h" : Math.round(s / 86400) + " d";
+  const dur = (s) => s < 60 ? Math.round(s) + " s" : s < 3600 ? Math.round(s / 60) + " min" : (s / 3600).toFixed(1) + " h";
+  const pretty = (id) => String(id || "").replace(/^in:/, "").replace(/_/g, " ");
+  const store = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  let S = null, V = null, tab = store.get("lootbot.tab") || "bot", after = 0, running = false;
+
+  function toast(m) { const t = $("toast"); t.textContent = m; t.classList.add("on"); clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("on"), 3200); }
+  async function post(path, body) {
+    try {
+      const r = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+      const j = await r.json(); toast(j.msg || j.error || "Done");
+    } catch (e) { toast("The dashboard isn't answering"); }
+    refresh();
   }
-}
-async function watchMode(watch) {
-  const name = $("mcName").value.trim();
-  if (watch && !/^[A-Za-z0-9_]{3,16}$/.test(name)) { toast("Enter your Minecraft name first"); return; }
-  try { localStorage.setItem("mcName", name); } catch (e) { }
-  if (watch) {
-    // Spectators see through the bot's camera and don't take control, so the bot keeps looting.
-    await cmdSeq(["spectator on", `spectator whitelist add ${name}`, "spectator playerCamOnJoin on",
-                  "serverConnection preferLoginAsController off"]);
-    $("watchNote").textContent = "Now join localhost: you'll be inside the bot's view. Leave any time; the bot carries on.";
-    toast("Watch mode set");
-  } else {
-    await cmdSeq(["serverConnection preferLoginAsController on"]);
-    $("watchNote").textContent = "Now joining localhost takes control (the bot pauses while you're on). Disconnect to let it work again.";
-    toast("Control mode set");
+  const cmd = (c) => post("/ui/zenith/cmd", { cmd: c });
+
+  // theme
+  $("themeBtn").onclick = () => {
+    const dark = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() === "#101316";
+    document.documentElement.dataset.theme = dark ? "light" : "dark";
+    store.set("lootbot.theme", document.documentElement.dataset.theme);
+  };
+
+  // tabs
+  function setTab(t) {
+    tab = t; store.set("lootbot.tab", t);
+    document.querySelectorAll(".tab").forEach((b) => b.classList.toggle("on", b.dataset.tab === t));
+    for (const id of ["bot", "live", "map", "targets", "visits", "console", "setup"]) $("t-" + id).classList.toggle("hidden", id !== t);
+    if (t === "console") { const c = $("console"); c.scrollTop = c.scrollHeight; }
+    drawLive(); drawMap();
   }
-  refresh();
-}
-function addTarget() {
-  const x = parseInt($("addX").value), z = parseInt($("addZ").value);
-  if (isNaN(x) || isNaN(z)) { toast("Enter X and Z"); return; }
-  post("/ui/targets/add", {x, z, label: $("addLabel").value});
-  $("addX").value = $("addZ").value = $("addLabel").value = "";
-}
-function prio(label) {
-  const l = (label || "").toLowerCase();
-  if (l.startsWith("high")) return "high"; if (l.startsWith("moderate")) return "moderate"; if (l.startsWith("low")) return "low";
-  return "";
-}
-function lineClass(t) {
-  if (t.startsWith("> ")) return "me";
-  if (t.startsWith("---")) return "sys";
-  if (t.includes("LootBot")) return "loot";
-  return "";
-}
-function render(s) {
-  const z = s.zenith;
-  $("pxDot").className = "dot " + (z.running ? "on" : (z.installed ? "" : "bad"));
-  $("pxText").textContent = z.running ? "running " + ago(z.uptime) : (z.installed ? "stopped" : "not installed");
-  $("startPx").disabled = z.running || !z.installed; $("stopPx").disabled = !z.running;
-  document.querySelectorAll("[data-cmd]").forEach(b => b.disabled = !z.running);
-  $("watchBtn").disabled = $("controlBtn").disabled = !z.running;
-  $("conInfo").textContent = z.restarts ? z.restarts + " restart(s)" : "";
+  $("tabs").onclick = (e) => { const b = e.target.closest(".tab"); if (b) setTab(b.dataset.tab); };
+  document.addEventListener("click", (e) => {
+    const g = e.target.closest("[data-goto]"); if (g) { setTab(g.dataset.goto); return; }
+    const c = e.target.closest("[data-cmd]"); if (c && !c.disabled) { cmd(c.dataset.cmd); return; }
+    const p = e.target.closest("[data-post]"); if (p && !p.disabled) post(p.dataset.post);
+  });
 
-  const b = s.bots[0];
-  if (b) {
-    const fresh = b.ago < 180;
-    $("botDot").className = "dot " + (fresh ? "on" : "warn");
-    const hp = b.health != null ? Math.round(b.health) + " hp" : "";
-    const pos = b.x != null ? `${Math.round(b.x)}, ${Math.round(b.z)}` : "";
-    $("botText").textContent = `${b.name} · ${fresh ? "active" : "seen " + ago(b.ago) + " ago"}${hp ? " · " + hp : ""}${b.freeSlots != null ? " · " + b.freeSlots + " free" : ""}${pos ? " · " + pos : ""}`;
-    botPos = b.x != null ? [b.x, b.z] : null;
-  }
-  $("srcDot").className = "dot " + (s.sources.discord ? "on" : "warn");
-  $("srcText").textContent = [s.sources.discord && "Discord", s.sources.gridfly && "GridFly"].filter(Boolean).join(" + ") || "none set";
-  $("verText").textContent = s.live || "–";
-
-  $("tEp").textContent = s.day.episodes; $("tPts").textContent = s.day.points.toLocaleString();
-  $("tDeaths").textContent = s.day.deaths; $("tOpen").textContent = s.targets.counts.open || 0;
-  const c = s.targets.counts;
-  $("tgtCounts").textContent = Object.entries(c).map(([k, v]) => `${v} ${k}`).join(" · ");
-
-  $("tgts").innerHTML = s.targets.open.map(t => {
-    const p = prio(t.label);
-    const d = botPos ? Math.round(Math.hypot(t.x - botPos[0], t.z - botPos[1])).toLocaleString() : "–";
-    const state = t.assigned_to ? `<span class="tag on">on it: ${esc(t.assigned_to)}</span>`
-      : t.parked ? `<span class="tag">back in ${ago(t.parked)}</span>` : (t.last_outcome ? `<span class="muted">${esc(t.last_outcome)}</span>` : "");
-    return `<tr><td>${p ? `<span class="tag ${p}">${p}</span> ` : ""}${esc((t.label || "").replace(/^(high|moderate|low)( priority)?\s*-?\s*/i, "")) || '<span class="muted">' + esc(t.source) + "</span>"}</td>
-      <td class="num">${t.x}, ${t.z}${t.dim !== "overworld" ? " " + esc(t.dim) : ""}</td><td class="num">${d}</td><td class="num">${t.attempts}</td>
-      <td>${state}</td><td><button class="mini" onclick="post('/ui/targets/${t.id}/skip')">Skip</button></td></tr>`;
-  }).join("") || `<tr><td colspan="6" class="muted">No targets waiting. Finds from Discord show up here within 5 minutes.</td></tr>`;
-
-  $("eps").innerHTML = s.episodes.map(e => `<tr><td class="muted">${ago(e.ago)} ago</td><td class="num">#${e.target_id}</td>
-    <td>${esc(e.outcome)}</td><td class="num">${Math.round(e.value || 0)}</td><td>${esc(e.items) || '<span class="muted">nothing</span>'}</td></tr>`).join("")
-    || `<tr><td colspan="5" class="muted">No visits yet.</td></tr>`;
-
-  $("events").innerHTML = s.events.map(e => `<div class="ev"><span class="muted">${ago(e.ago)} ago · ${esc(e.bot || "learner")} · ${esc(e.kind)}</span><br>${esc(e.text)}</div>`).join("")
-    || `<div class="muted">Nothing yet.</div>`;
-
-  $("best").innerHTML = Object.entries(s.best).filter(([k]) => k !== "wanted").map(([k, v]) => `<span>${esc(k)}</span><span>${esc(v)}</span>`).join("");
-
-  if (z.lines.length) {
-    const con = $("console");
-    const atBottom = con.scrollHeight - con.scrollTop - con.clientHeight < 40;
-    const frag = document.createDocumentFragment();
-    for (const l of z.lines) {
-      const div = document.createElement("div");
-      div.className = lineClass(l.t); div.textContent = l.t || " ";
-      frag.appendChild(div); after = l.n;
+  // ---------------------------------------------------------------- state
+  async function refresh() {
+    try {
+      const r = await fetch("/ui/state?after=" + after, { cache: "no-store" });
+      S = await r.json(); draw();
+    } catch (e) {
+      $("pill").className = "pill down"; $("pillText").textContent = "No link"; $("sub").textContent = "the dashboard isn't answering";
     }
-    con.appendChild(frag);
-    while (con.childNodes.length > 1500) con.removeChild(con.firstChild);
-    if (atBottom || firstState) con.scrollTop = con.scrollHeight;
   }
-  if (firstState && !b) $("firstTime").open = true;
-  firstState = false;
-}
-async function refresh() {
-  try {
-    const r = await fetch("/ui/state?after=" + after);
-    render(await r.json());
-  } catch (e) {
-    $("pxText").textContent = "learner not answering"; $("pxDot").className = "dot bad";
+  async function refreshView() {
+    try { const r = await fetch("/ui/view", { cache: "no-store" }); const v = await r.json(); V = v && v.bot ? v : null; } catch (e) { }
+    drawNow(); drawMap();
   }
-}
-refresh(); setInterval(refresh, 2000);
+  setInterval(refresh, 2000); setInterval(refreshView, 1000);
 
-// ---------------------------------------------------------------- live view
-const MAP_RGB = [0x000000,0x7FB238,0xF7E9A3,0xC7C7C7,0xFF0000,0xA0A0FF,0xA7A7A7,0x007C00,0xFFFFFF,0xA4A8B8,0x976D4D,0x707070,
-  0x4040FF,0x8F7748,0xFFFCF5,0xD87F33,0xB24CD8,0x6699D8,0xE5E533,0x7FCC19,0xF27FA5,0x4C4C4C,0x999999,0x4C7F99,0x7F3FB2,0x334CB2,
-  0x664C33,0x667F33,0x993333,0x191919,0xFAEE4D,0x5CDBD5,0x4A80FF,0x00D93A,0x815631,0x700200,0xD1B1A1,0x9F5224,0x95576C,0x706C8A,
-  0xBA8524,0x677535,0xA04D4E,0x392923,0x876B62,0x575C5C,0x7A4958,0x4C3E5C,0x4C3223,0x4C522A,0x8E3C2E,0x251610,0xBD3031,0x943F61,
-  0x5C191D,0x167E86,0x3A8E8C,0x562C3E,0x14B485,0x646464,0xD8AF93,0x7FA796];
-let zoom = 1, lastView = null, terrain = null, terrainKey = "";
-document.querySelectorAll("[data-zoom]").forEach(b => b.addEventListener("click", () => { zoom = +b.dataset.zoom; drawView(); }));
-function b64(s) { const bin = atob(s); const a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return a; }
-function buildTerrain(g) {
-  const n = g.size, col = b64(g.colours), hRaw = b64(g.heights);
-  const h = new Int8Array(hRaw.buffer);
-  const c = document.createElement("canvas"); c.width = c.height = n;
-  const ctx = c.getContext("2d"), img = ctx.createImageData(n, n);
-  for (let i = 0; i < n * n; i++) {
-    const id = col[i], o = i * 4;
-    if (!id) { img.data[o] = 14; img.data[o+1] = 17; img.data[o+2] = 20; img.data[o+3] = 255; continue; }
-    let rgb = MAP_RGB[id] ?? 0x808080;
-    // Shade like a map: lighter where the column is higher than the one north of it, darker where lower.
-    const north = i >= n && col[i - n] ? h[i - n] : h[i];
-    let f = h[i] > north ? 1.08 : h[i] < north ? 0.78 : 0.92;
-    f *= 0.85 + Math.max(-0.25, Math.min(0.25, h[i] / 40));
-    img.data[o] = Math.min(255, ((rgb >> 16) & 255) * f); img.data[o+1] = Math.min(255, ((rgb >> 8) & 255) * f);
-    img.data[o+2] = Math.min(255, (rgb & 255) * f); img.data[o+3] = 255;
-  }
-  ctx.putImageData(img, 0, 0);
-  return c;
-}
-function tag(ctx, text, x, y, colr) {
-  const w = ctx.measureText(text).width + 8;
-  ctx.fillStyle = "rgba(10,12,14,.78)"; ctx.fillRect(x - 4, y - 12, w, 16);
-  ctx.fillStyle = colr; ctx.fillText(text, x, y);
-}
-function drawView() {
-  const v = lastView, cv = $("map"), ctx = cv.getContext("2d");
-  if (!v || !v.grid) { $("mapMsg").style.display = "flex"; ctx.clearRect(0, 0, cv.width, cv.height); return; }
-  $("mapMsg").style.display = "none";
-  const g = v.grid, key = g.x0 + ":" + g.z0 + ":" + g.colours.length + ":" + g.colours.slice(0, 64) + g.heights.slice(-64);
-  if (key !== terrainKey) { terrain = buildTerrain(g); terrainKey = key; }
-  const W = cv.width, n = g.size, view = n / zoom, scale = W / view;
-  // World coords at the canvas centre: the bot.
-  const cx = v.x, cz = v.z;
-  const sx = wx => (wx - cx) * scale + W / 2, sz = wz => (wz - cz) * scale + W / 2;
-  ctx.imageSmoothingEnabled = false;
-  ctx.fillStyle = "#0e1114"; ctx.fillRect(0, 0, W, W);
-  ctx.drawImage(terrain, sx(g.x0), sz(g.z0), n * scale, n * scale);
-  const job = v.job || {};
-  // Containers
-  for (const c of job.containers || []) {
-    const colr = c.state === "done" ? "#5fd38d" : c.state === "now" ? "#6aa8e8" : "#e8b04b";
-    ctx.strokeStyle = colr; ctx.lineWidth = c.state === "now" ? 3 : 2;
-    const s = Math.max(6, scale);
-    ctx.strokeRect(sx(c.x) - (c.state === "now" ? 2 : 0), sz(c.z) - (c.state === "now" ? 2 : 0), s + (c.state === "now" ? 4 : 0), s + (c.state === "now" ? 4 : 0));
-  }
-  // Markers: target/goal and home, on the map or as an arrow at the edge.
-  const marks = [];
-  if (job.goal) marks.push([job.goal.x + .5, job.goal.z + .5, "#c77dff", job.target && job.goal.x === job.target.x ? "target" : "goal"]);
-  else if (job.target) marks.push([job.target.x + .5, job.target.z + .5, "#c77dff", "target"]);
-  if (v.home) marks.push([v.home.x + .5, v.home.z + .5, "#9ad1ff", "home"]);
-  ctx.font = "12px system-ui, sans-serif";
-  for (const [mx, mz, colr, label] of marks) {
-    let px = sx(mx), pz = sz(mz);
-    const inside = px > 10 && px < W - 10 && pz > 10 && pz < W - 10;
-    ctx.fillStyle = colr; ctx.strokeStyle = colr;
-    if (inside) {
-      ctx.beginPath(); ctx.arc(px, pz, 7, 0, Math.PI * 2); ctx.lineWidth = 2.5; ctx.stroke();
-      tag(ctx, label, px + 11, pz + 4, colr);
+  const prio = (label) => { const l = (label || "").toLowerCase(); return l.startsWith("high") ? "high" : l.startsWith("moderate") ? "moderate" : l.startsWith("low") ? "low" : ""; };
+  const stripPrio = (label) => (label || "").replace(/^(high|moderate|low)( priority)?\s*-?\s*/i, "");
+  const outcomeClass = (o) => o === "looted" ? "ok" : /died|aborted|failed|unreachable/.test(o || "") ? "bad" : /empty|no_containers|full|no_room/.test(o || "") ? "warn" : "";
+
+  function draw() {
+    const z = S.zenith, b = S.bots[0];
+    running = z.running;
+    const fresh = b && b.ago < 180;
+    const busy = V && V.job && !["idle", "off", "asking"].includes(V.job.phase);
+    $("pill").className = "pill " + (!z.running ? "down" : !fresh ? "warn" : busy ? "busy" : "live");
+    $("pillText").textContent = !z.running ? (z.installed ? "Proxy stopped" : "Proxy not installed") : !fresh ? "Waiting for the bot" : busy ? "Working" : "Online";
+    $("sub").textContent = [b ? b.name : null, S.live ? "v" + S.live : null, z.running ? "proxy up " + ago(z.uptime) : null].filter(Boolean).join(" · ") || "local dashboard";
+    document.querySelectorAll("[data-need=run]").forEach((x) => x.disabled = !z.running);
+    $("pxStart").disabled = z.running || !z.installed; $("pxStop").disabled = !z.running;
+    $("watchBtn").disabled = $("controlBtn").disabled = !z.running;
+
+    const counts = S.targets.counts;
+    $("cTgt").textContent = counts.open || ""; $("cVis").textContent = S.day.episodes || "";
+    $("sVisits").textContent = num(S.day.episodes); $("sPoints").textContent = num(S.day.points);
+    $("sWaiting").textContent = num(counts.open || 0); $("sDeaths").textContent = num(S.day.deaths);
+
+    // bot card
+    if (b) {
+      $("botName").textContent = b.name;
+      $("botState").className = "state " + (fresh ? "ok" : "warn"); $("botState").textContent = fresh ? "Online" : "Seen " + ago(b.ago) + " ago";
+      $("botKv").innerHTML = [
+        ["Position", b.x != null ? `<span class="mono">${num(Math.round(b.x))}, ${num(Math.round(b.z))}</span> ${esc(b.dim || "")}` : "–"],
+        ["Health", b.health != null ? Math.round(b.health) + " hp" : "–"],
+        ["Free slots", b.freeSlots ?? "–"],
+        ["Version", esc(b.version || "–")],
+      ].map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join("");
     } else {
-      const a = Math.atan2(pz - W / 2, px - W / 2), r = W / 2 - 22;
-      const ex = W / 2 + Math.cos(a) * r, ez = W / 2 + Math.sin(a) * r;
-      ctx.save(); ctx.translate(ex, ez); ctx.rotate(a);
-      ctx.beginPath(); ctx.moveTo(12, 0); ctx.lineTo(-6, -8); ctx.lineTo(-6, 8); ctx.closePath(); ctx.fill(); ctx.restore();
-      const d = Math.round(Math.hypot(mx - v.x, mz - v.z));
-      const tx = Math.min(W - 110, Math.max(6, ex - 40)), tz = Math.min(W - 8, Math.max(16, ez + (ez < W / 2 ? 24 : -14)));
-      tag(ctx, `${label} ${d.toLocaleString()} m`, tx, tz, colr);
+      $("botKv").innerHTML = `<dt>Status</dt><dd class="muted">Not seen yet. Start the proxy, log in, and press Start looting.</dd>`;
+    }
+
+    // latest visits
+    const eps = S.episodes;
+    $("latest").innerHTML = eps.slice(0, 6).map((e) => `<li><span class="state ${outcomeClass(e.outcome)}" style="margin-left:0">${esc(e.outcome)}</span><span class="grow">${esc(e.items) || '<span class="faint">nothing taken</span>'}</span><span class="mono small muted">${num(Math.round(e.value || 0))} pts</span><span class="faint small">${ago(e.ago)} ago</span></li>`).join("")
+      || `<li class="empty">No visits yet.</li>`;
+
+    // targets
+    const bx = b && b.x != null ? b.x : null, bz = b && b.z != null ? b.z : null;
+    $("tgtCounts").textContent = Object.entries(counts).map(([k, v]) => `${v} ${k}`).join(" · ") || "No targets yet. Discord finds show up within 5 minutes once the finds bot is set.";
+    $("tgts").innerHTML = S.targets.open.map((t) => {
+      const p = prio(t.label);
+      const d = bx != null ? num(Math.round(Math.hypot(t.x - bx, t.z - bz))) : "–";
+      const st = t.assigned_to ? `<span class="tag on">on it: ${esc(t.assigned_to)}</span>` : t.parked ? `<span class="tag">back in ${ago(t.parked)}</span>` : t.last_outcome ? `<span class="faint">${esc(t.last_outcome)}</span>` : "";
+      return `<tr><td>${p ? `<span class="tag ${p}">${p}</span>` : `<span class="faint">${esc(t.source)}</span>`}</td><td class="wrap">${esc(stripPrio(t.label)) || ""}</td>
+        <td class="r">${num(t.x)}</td><td class="r">${num(t.z)}</td><td class="r">${d}</td><td class="r">${t.attempts}</td><td>${st}</td>
+        <td><button class="btn sm" data-skip="${t.id}">Skip</button></td></tr>`;
+    }).join("") || `<tr><td colspan="8" class="empty">No targets waiting.</td></tr>`;
+
+    // visits
+    $("eps").innerHTML = eps.map((e) => `<tr><td class="faint">${ago(e.ago)} ago</td><td>${esc(e.bot)}</td><td class="r">#${e.target_id}</td>
+      <td><span class="state ${outcomeClass(e.outcome)}" style="margin-left:0">${esc(e.outcome)}</span></td><td class="r">${num(Math.round(e.value || 0))}</td>
+      <td class="r">${dur(e.seconds || 0)}</td><td class="wrap">${esc(e.items) || '<span class="faint">nothing</span>'}</td></tr>`).join("")
+      || `<tr><td colspan="7" class="empty">No visits yet.</td></tr>`;
+    $("events").innerHTML = S.events.map((e) => `<div class="logl"><span class="tm">${ago(e.ago)}</span><span><span class="src">${esc(e.bot || "learner")}</span>${esc(e.text)}</span></div>`).join("") || `<div class="empty">Nothing yet.</div>`;
+
+    // setup
+    $("best").innerHTML = Object.entries(S.best).filter(([k]) => k !== "wanted").map(([k, v]) => `<dt>${esc(k)}</dt><dd class="mono">${esc(v)}</dd>`).join("");
+    $("sources").innerHTML = `<dt>Discord finds</dt><dd>${S.sources.discord ? '<span style="color:var(--green)">on</span>' : '<span class="faint">not set</span>'}</dd>
+      <dt>GridFly finds</dt><dd>${S.sources.gridfly ? '<span style="color:var(--green)">on</span>' : '<span class="faint">not set</span>'}</dd>
+      <dt>Plugin version</dt><dd class="mono">${esc(S.live || "–")}</dd>`;
+
+    // console
+    if (z.lines.length) {
+      const con = $("console"), atBottom = con.scrollHeight - con.scrollTop - con.clientHeight < 40;
+      const frag = document.createDocumentFragment();
+      for (const l of z.lines) {
+        const d = document.createElement("div");
+        d.className = l.t.startsWith("> ") ? "me" : l.t.startsWith("---") ? "sys" : l.t.includes("LootBot") ? "loot" : "";
+        d.textContent = l.t || " "; frag.appendChild(d); after = l.n;
+      }
+      con.appendChild(frag);
+      while (con.childNodes.length > 2000) con.removeChild(con.firstChild);
+      if (atBottom) con.scrollTop = con.scrollHeight;
+    }
+    drawNow();
+  }
+
+  function drawNow() {
+    const job = V && V.job;
+    const phase = job ? job.phase : (S && S.zenith.running ? "idle" : "off");
+    const NAMES = { off: "Off", idle: "Idle", asking: "Asking for a target", updating: "Updating", travel: "Travelling", settle: "Arrived", loot: "Looting", home: "Going home", deposit: "Unloading" };
+    $("sDoing").textContent = (NAMES[phase] || phase).split(" ")[0];
+    $("nowWhat").textContent = NAMES[phase] || phase;
+    $("nowState").className = "state " + (["travel", "loot", "settle", "home", "deposit"].includes(phase) ? "go" : phase === "off" ? "" : "ok");
+    $("nowState").textContent = job && job.step ? job.step : phase;
+    $("nowStep").textContent = job ? (job.target ? `Target #${job.target.id} ${stripPrio(job.target.label || "")} at ${num(job.target.x)}, ${num(job.target.z)}` : "") + (job.note ? (job.target ? " · " : "") + job.note : "") : "";
+    const cont = job && job.containers;
+    if (cont && cont.length) {
+      const done = cont.filter((c) => c.state === "done").length;
+      $("nowProgWrap").hidden = false; $("nowBar").style.width = Math.round(100 * done / cont.length) + "%";
+      $("nowProgText").textContent = `${done} of ${cont.length} containers`; $("nowDist").textContent = "";
+    } else if (job && job.goal && V) {
+      const d = Math.hypot(job.goal.x - V.x, job.goal.z - V.z);
+      $("nowProgWrap").hidden = false; $("nowBar").style.width = "0%";
+      $("nowProgText").textContent = phase === "home" ? "Heading home" : "On the way"; $("nowDist").textContent = num(Math.round(d)) + " m to go";
+    } else $("nowProgWrap").hidden = true;
+    $("nowLoot").innerHTML = job && job.loot ? `<span class="muted">Taken this visit:</span> ${esc(job.loot.split(", ").map(pretty).join(", "))}` : "";
+  }
+
+  // targets: skip / add
+  document.addEventListener("click", (e) => { const s = e.target.closest("[data-skip]"); if (s) post(`/ui/targets/${s.dataset.skip}/skip`); });
+  $("addGo").onclick = () => {
+    const x = parseInt($("addX").value), z = parseInt($("addZ").value);
+    if (isNaN(x) || isNaN(z)) { toast("Enter X and Z"); return; }
+    post("/ui/targets/add", { x, z, label: $("addLabel").value });
+    $("addX").value = $("addZ").value = $("addLabel").value = "";
+  };
+
+  // console input
+  const sendCmd = () => { const c = $("cmd").value.trim(); if (!c) return; cmd(c); $("cmd").value = ""; };
+  $("cmdGo").onclick = sendCmd; $("cmd").addEventListener("keydown", (e) => { if (e.key === "Enter") sendCmd(); });
+
+  // watch / control
+  $("mcName").value = store.get("lootbot.mcName") || "";
+  async function cmdSeq(list) { for (const c of list) { await fetch("/ui/zenith/cmd", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ cmd: c }) }); await sleep(400); } }
+  $("watchBtn").onclick = async () => {
+    const n = $("mcName").value.trim();
+    if (!/^[A-Za-z0-9_]{3,16}$/.test(n)) { toast("Enter your Minecraft name first"); return; }
+    store.set("lootbot.mcName", n);
+    await cmdSeq(["spectator on", `spectator whitelist add ${n}`, "spectator playerCamOnJoin on", "serverConnection preferLoginAsController off"]);
+    $("watchNote").textContent = "Watch mode: join localhost and you're inside the bot's view. Leave any time; it carries on.";
+    toast("Watch mode set");
+  };
+  $("controlBtn").onclick = async () => {
+    await cmdSeq(["serverConnection preferLoginAsController on"]);
+    $("watchNote").textContent = "Control mode: joining localhost takes over (the bot pauses while you're on). Disconnect to let it work again.";
+    toast("Control mode set");
+  };
+
+  // ---------------------------------------------------------------- map (top-down)
+  const MAP_RGB = [0x000000,0x7FB238,0xF7E9A3,0xC7C7C7,0xFF0000,0xA0A0FF,0xA7A7A7,0x007C00,0xFFFFFF,0xA4A8B8,0x976D4D,0x707070,
+    0x4040FF,0x8F7748,0xFFFCF5,0xD87F33,0xB24CD8,0x6699D8,0xE5E533,0x7FCC19,0xF27FA5,0x4C4C4C,0x999999,0x4C7F99,0x7F3FB2,0x334CB2,
+    0x664C33,0x667F33,0x993333,0x191919,0xFAEE4D,0x5CDBD5,0x4A80FF,0x00D93A,0x815631,0x700200,0xD1B1A1,0x9F5224,0x95576C,0x706C8A,
+    0xBA8524,0x677535,0xA04D4E,0x392923,0x876B62,0x575C5C,0x7A4958,0x4C3E5C,0x4C3223,0x4C522A,0x8E3C2E,0x251610,0xBD3031,0x943F61,
+    0x5C191D,0x167E86,0x3A8E8C,0x562C3E,0x14B485,0x646464,0xD8AF93,0x7FA796];
+  let zoom = 1, terrain = null, terrainKey = "";
+  $("zoomSeg").onclick = (e) => { const b = e.target.closest("button"); if (!b) return; zoom = +b.dataset.z; $("zoomSeg").querySelectorAll("button").forEach((x) => x.classList.toggle("on", x === b)); drawMap(); };
+  const b64 = (s) => { const bin = atob(s), a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return a; };
+  function buildTerrain(g) {
+    const n = g.size, col = b64(g.colours), h = new Int8Array(b64(g.heights).buffer);
+    const c = document.createElement("canvas"); c.width = c.height = n;
+    const ctx = c.getContext("2d"), img = ctx.createImageData(n, n);
+    for (let i = 0; i < n * n; i++) {
+      const id = col[i], o = i * 4;
+      if (!id) { img.data.set([14, 17, 20, 255], o); continue; }
+      const rgb = MAP_RGB[id] ?? 0x808080, north = i >= n && col[i - n] ? h[i - n] : h[i];
+      let f = h[i] > north ? 1.08 : h[i] < north ? 0.78 : 0.92;
+      f *= 0.85 + Math.max(-0.25, Math.min(0.25, h[i] / 40));
+      img.data.set([Math.min(255, ((rgb >> 16) & 255) * f), Math.min(255, ((rgb >> 8) & 255) * f), Math.min(255, (rgb & 255) * f), 255], o);
+    }
+    ctx.putImageData(img, 0, 0); return c;
+  }
+  function tagText(ctx, text, x, y, colr) {
+    const w = ctx.measureText(text).width + 8;
+    ctx.fillStyle = "rgba(10,12,14,.8)"; ctx.fillRect(x - 4, y - 12, w, 16); ctx.fillStyle = colr; ctx.fillText(text, x, y);
+  }
+  function drawMap() {
+    if (tab !== "map") return;
+    const v = V, cv = $("map"), ctx = cv.getContext("2d"), W = cv.width;
+    ctx.fillStyle = "#0b0f14"; ctx.fillRect(0, 0, W, W);
+    const facts = $("facts");
+    if (!v || !v.grid) {
+      ctx.fillStyle = "#9aa39b"; ctx.font = "15px system-ui, sans-serif"; ctx.textAlign = "center";
+      ctx.fillText("No map yet: it appears once the bot is in game with LootBot loaded.", W / 2, W / 2); ctx.textAlign = "start";
+      facts.innerHTML = `<dt>Bot</dt><dd class="muted">Waiting</dd>`; $("mapAge").textContent = ""; return;
+    }
+    const g = v.grid, key = g.x0 + ":" + g.z0 + ":" + g.colours.length + g.colours.slice(0, 48) + g.heights.slice(-48);
+    if (key !== terrainKey) { terrain = buildTerrain(g); terrainKey = key; }
+    const n = g.size, scale = W / (n / zoom), cx = v.x, cz = v.z;
+    const sx = (x) => (x - cx) * scale + W / 2, sz = (z) => (z - cz) * scale + W / 2;
+    ctx.imageSmoothingEnabled = false; ctx.drawImage(terrain, sx(g.x0), sz(g.z0), n * scale, n * scale);
+    const css = (n) => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+    const job = v.job || {}, cTeal = css("--teal"), cBlue = css("--blue"), cGreen = css("--green"), cPurple = css("--purple"), cRed = css("--red");
+    for (const c of job.containers || []) {
+      const col = c.state === "done" ? cGreen : c.state === "now" ? cBlue : cTeal, s = Math.max(6, scale);
+      ctx.strokeStyle = col; ctx.lineWidth = c.state === "now" ? 3 : 2; ctx.strokeRect(sx(c.x), sz(c.z), s, s);
+    }
+    ctx.font = "12px 'IBM Plex Mono', monospace";
+    const marks = [];
+    if (job.target) marks.push([job.target.x + .5, job.target.z + .5, cPurple, "target"]);
+    else if (job.goal) marks.push([job.goal.x + .5, job.goal.z + .5, cPurple, "goal"]);
+    if (v.home) marks.push([v.home.x + .5, v.home.z + .5, cBlue, "home"]);
+    for (const [mx, mz, col, label] of marks) {
+      const px = sx(mx), pz = sz(mz);
+      if (px > 10 && px < W - 10 && pz > 10 && pz < W - 10) {
+        ctx.strokeStyle = col; ctx.lineWidth = 2.5; ctx.beginPath(); ctx.arc(px, pz, 7, 0, Math.PI * 2); ctx.stroke(); tagText(ctx, label, px + 11, pz + 4, col);
+      } else {
+        const a = Math.atan2(pz - W / 2, px - W / 2), r = W / 2 - 22, ex = W / 2 + Math.cos(a) * r, ez = W / 2 + Math.sin(a) * r;
+        ctx.save(); ctx.translate(ex, ez); ctx.rotate(a); ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(12, 0); ctx.lineTo(-6, -8); ctx.lineTo(-6, 8); ctx.closePath(); ctx.fill(); ctx.restore();
+        tagText(ctx, `${label} ${num(Math.round(Math.hypot(mx - v.x, mz - v.z)))} m`, Math.min(W - 130, Math.max(6, ex - 50)), Math.min(W - 8, Math.max(16, ez + (ez < W / 2 ? 24 : -14))), col);
+      }
+    }
+    for (const p of v.players || []) { const px = sx(p.x), pz = sz(p.z); ctx.fillStyle = cRed; ctx.beginPath(); ctx.arc(px, pz, 6, 0, Math.PI * 2); ctx.fill(); tagText(ctx, p.name, px + 10, pz - 6, cRed); }
+    const yaw = (v.yaw || 0) * Math.PI / 180, dx = -Math.sin(yaw), dz = Math.cos(yaw);
+    ctx.beginPath(); ctx.arc(W / 2, W / 2, 15, 0, Math.PI * 2); ctx.fillStyle = "rgba(255,255,255,.18)"; ctx.fill(); ctx.strokeStyle = "rgba(255,255,255,.7)"; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.save(); ctx.translate(W / 2, W / 2); ctx.rotate(Math.atan2(dz, dx)); ctx.fillStyle = "#fff"; ctx.strokeStyle = "#000"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(13, 0); ctx.lineTo(-8, -8); ctx.lineTo(-4, 0); ctx.lineTo(-8, 8); ctx.closePath(); ctx.stroke(); ctx.fill(); ctx.restore();
+    const bar = Math.round(scale * 10); ctx.fillStyle = "rgba(10,12,14,.8)"; ctx.fillRect(8, W - 28, bar + 84, 20); ctx.fillStyle = "#ebe6da"; ctx.fillRect(14, W - 19, bar, 3); ctx.fillText("10 blocks", 22 + bar, W - 13);
+    $("mapAge").textContent = v.age < 5 ? "live" : v.age + " s old";
+    const rows = [["Bot", esc(v.bot)], ["Doing", esc(job.phase || "–") + (job.step ? " · " + esc(job.step) : "")],
+      ["Position", `<span class="mono">${num(Math.round(v.x))}, ${Math.round(v.y)}, ${num(Math.round(v.z))}</span> ${esc(v.dim)}`],
+      ["Health", Math.round(v.health) + " hp"], ["Free slots", v.freeSlots]];
+    if (job.target) rows.push(["Target", `#${job.target.id} ${esc(stripPrio(job.target.label || ""))}<br><span class="mono">${num(job.target.x)}, ${num(job.target.z)}</span> · ${num(Math.round(Math.hypot(job.target.x - v.x, job.target.z - v.z)))} m`]);
+    if (job.containers) rows.push(["Containers", `${job.containers.filter((c) => c.state === "done").length} of ${job.containers.length} done`]);
+    if (job.loot) rows.push(["Taken", esc(job.loot.split(", ").map(pretty).join(", "))]);
+    if ((v.players || []).length) rows.push(["Players near", `<span style="color:var(--red)">${v.players.map((p) => esc(p.name)).join(", ")}</span>`]);
+    if (job.note) rows.push(["Last", esc(job.note)]);
+    facts.innerHTML = rows.map(([k, val]) => `<dt>${k}</dt><dd>${val}</dd>`).join("");
+  }
+
+  // ---------------------------------------------------------------- live view: the bot's eyes (three.js, loaded on first use)
+  let live = null, liveTimer = null, liveV = -1, liveBusy = false, liveMode = "eyes", liveSeen = 0;
+  const loadThree = () => new Promise((res, rej) => {
+    if (window.THREE) return res();
+    const sc = document.createElement("script");
+    sc.src = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js";
+    sc.onload = () => res(); sc.onerror = () => rej(new Error("three"));
+    document.head.appendChild(sc);
+  });
+  function drawLive() { if (tab === "live" && !document.hidden) startLive(); else stopLive(); }
+  document.addEventListener("visibilitychange", drawLive);
+  async function startLive() {
+    if (liveTimer) return;
+    liveTimer = setInterval(pollLive, 300);
+    try { await loadThree(); } catch (e) { $("liveMsg").textContent = "Couldn't load the 3D view: it needs an internet connection."; return; }
+    if (!live) initLive();
+    live.running = true; requestAnimationFrame(liveFrame);
+    pollLive();
+  }
+  function stopLive() { if (liveTimer) { clearInterval(liveTimer); liveTimer = null; } if (live) live.running = false; }
+  async function pollLive() {
+    if (liveBusy || !live) return;
+    liveBusy = true;
+    try {
+      const r = await fetch("/ui/eyes?since=" + liveV, { cache: "no-store" });
+      const d = await r.json();
+      if (d.waiting) { $("liveMsg").textContent = S && S.zenith.running ? "Waiting for the bot to send what it sees…" : "The proxy isn't running."; return; }
+      if (d.blocks) { buildWorld(d.blocks); liveV = d.v; }
+      if (d.pose && d.pose.v === liveV) {
+        live.target = d.pose; if (!live.cur) live.cur = Object.assign({}, d.pose);
+        setEnts(d.pose.ents || []); $("liveStep").textContent = d.pose.step || "";
+      }
+      $("liveMsg").textContent = d.age > 10 ? "Last seen " + Math.round(d.age) + " s ago" : "";
+      if (d.age <= 10) liveSeen = Date.now();
+    } catch (e) {
+      $("liveMsg").textContent = "Can't reach the live view (" + e.message + ").";
+    } finally { liveBusy = false; }
+    $("liveDot").classList.toggle("on", Date.now() - liveSeen < 2000);
+  }
+  function initLive() {
+    const T = window.THREE, canvas = $("liveCanvas");
+    const renderer = new T.WebGLRenderer({ canvas, antialias: true });
+    renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+    const scene = new T.Scene(), sky = new T.Color("#8fb8e8");
+    scene.background = sky; scene.fog = new T.Fog(sky, 14, 34);
+    const camera = new T.PerspectiveCamera(70, 16 / 9, 0.05, 200);
+    const world = new T.Group(), ents = new T.Group(); scene.add(world); scene.add(ents);
+    const botM = new T.Group();
+    const body = new T.Mesh(new T.BoxGeometry(0.6, 1.3, 0.35), new T.MeshBasicMaterial({ color: 0xe6a23c })); body.position.y = 0.65;
+    const head = new T.Mesh(new T.BoxGeometry(0.5, 0.5, 0.5), new T.MeshBasicMaterial({ color: 0xe6b98f })); head.position.y = 1.55;
+    const eye = new T.Mesh(new T.BoxGeometry(0.3, 0.08, 0.02), new T.MeshBasicMaterial({ color: 0x222222 })); eye.position.set(0, 1.6, 0.26);
+    botM.add(body, head, eye); scene.add(botM);
+    live = { T, renderer, scene, camera, world, ents, botM, orb: { yaw: 0.6, pitch: 0.5, dist: 7 }, running: false };
+    const fit = () => { const w = canvas.clientWidth, h = canvas.clientHeight; if (!w || !h) return; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); };
+    new ResizeObserver(fit).observe(canvas); fit();
+    let drag = null;
+    canvas.addEventListener("pointerdown", (e) => { drag = { x: e.clientX, y: e.clientY }; canvas.setPointerCapture(e.pointerId); });
+    canvas.addEventListener("pointermove", (e) => {
+      if (!drag) return;
+      if (liveMode !== "orbit") setLiveMode("orbit");
+      live.orb.yaw -= (e.clientX - drag.x) * 0.008; live.orb.pitch = Math.max(-0.2, Math.min(1.5, live.orb.pitch + (e.clientY - drag.y) * 0.008));
+      drag = { x: e.clientX, y: e.clientY };
+    });
+    canvas.addEventListener("pointerup", () => { drag = null; });
+    canvas.addEventListener("wheel", (e) => { e.preventDefault(); if (liveMode !== "orbit") setLiveMode("orbit"); live.orb.dist = Math.max(2, Math.min(30, live.orb.dist * (e.deltaY > 0 ? 1.12 : 0.89))); }, { passive: false });
+  }
+  function setLiveMode(m) { liveMode = m; $("liveSeg").querySelectorAll("button").forEach((b) => b.classList.toggle("on", b.dataset.lm === m)); }
+  $("liveSeg").onclick = (e) => { const b = e.target.closest("button"); if (b) setLiveMode(b.dataset.lm); };
+  const lerpAngle = (a, b, t) => { const d = ((b - a + 540) % 360) - 180; return a + d * t; };
+  function liveFrame() {
+    if (!live || !live.running) return;
+    requestAnimationFrame(liveFrame);
+    const { T, camera, botM } = live, tg = live.target, c = live.cur;
+    if (tg && c) {
+      const k = 0.22;
+      c.x += (tg.x - c.x) * k; c.y += (tg.y - c.y) * k; c.z += (tg.z - c.z) * k;
+      if (Math.abs(tg.x - c.x) > 8 || Math.abs(tg.z - c.z) > 8 || Math.abs(tg.y - c.y) > 8) Object.assign(c, { x: tg.x, y: tg.y, z: tg.z });
+      c.yaw = lerpAngle(c.yaw, tg.yaw, 0.3); c.pitch += (tg.pitch - c.pitch) * 0.3;
+      const yaw = c.yaw * Math.PI / 180, pitch = c.pitch * Math.PI / 180;
+      const dir = new T.Vector3(-Math.sin(yaw) * Math.cos(pitch), -Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch));
+      const eyeP = new T.Vector3(c.x, c.y + 1.62, c.z);
+      botM.position.set(c.x, c.y, c.z); botM.rotation.y = -yaw; botM.visible = liveMode !== "eyes";
+      if (liveMode === "eyes") { camera.position.copy(eyeP); camera.lookAt(eyeP.clone().add(dir)); }
+      else if (liveMode === "behind") {
+        const h = new T.Vector3(-Math.sin(yaw), 0, Math.cos(yaw));
+        camera.position.copy(eyeP).addScaledVector(h, -4).add(new T.Vector3(0, 1.4, 0)); camera.lookAt(eyeP.clone().addScaledVector(h, 2));
+      } else if (liveMode === "top") { camera.position.set(c.x, c.y + 26, c.z + 0.01); camera.lookAt(c.x, c.y, c.z); }
+      else { const o = live.orb; camera.position.set(c.x + Math.sin(o.yaw) * Math.cos(o.pitch) * o.dist, c.y + 1 + Math.sin(o.pitch) * o.dist, c.z + Math.cos(o.yaw) * Math.cos(o.pitch) * o.dist); camera.lookAt(c.x, c.y + 1, c.z); }
+    }
+    for (const it of live.ents.children) if (it.userData.spin) it.rotation.y += 0.03;
+    live.renderer.render(live.scene, camera);
+  }
+  const DYE = { white: "#f9fffe", orange: "#f9801d", magenta: "#c74ebd", light_blue: "#3ab3da", yellow: "#fed83d", lime: "#80c71f", pink: "#f38baa", gray: "#474f52",
+    light_gray: "#9d9d97", cyan: "#169c9c", purple: "#8932b8", blue: "#3c44aa", brown: "#835432", green: "#5e7c16", red: "#b02e26", black: "#1d1d21" };
+  const BC = { stone: "#7d7d7d", cobblestone: "#7a7a7a", mossy_cobblestone: "#6e7a5e", stone_bricks: "#7a7a7a", deepslate: "#4d4d50", cobbled_deepslate: "#4f4f52",
+    deepslate_tiles: "#38383b", deepslate_bricks: "#47474a", andesite: "#888888", diorite: "#bdbdbd", granite: "#9a6b59", tuff: "#6c6d66", calcite: "#dfe0dc",
+    grass_block: ["#5f9f35", "#866043"], dirt: "#866043", coarse_dirt: "#77553b", podzol: ["#5c3f1a", "#866043"], mycelium: ["#6f6265", "#866043"], dirt_path: ["#94783f", "#866043"],
+    farmland: "#5a3a1e", mud: "#3c3837", sand: "#dbd3a0", red_sand: "#be6621", sandstone: "#d8cb9b", gravel: "#837e7c", clay: "#a0a6b3", snow_block: "#f0fafa", snow: "#f0fafa",
+    ice: "#91b4fe", packed_ice: "#8db4f0", blue_ice: "#74a8fd", obsidian: "#1b1029", crying_obsidian: "#2b0b55", bedrock: "#3a3a3a", netherrack: "#6f3534",
+    soul_sand: "#51402f", soul_soil: "#4b3a2d", basalt: "#4f4f53", blackstone: "#2a2328", glowstone: "#fbd36b", magma_block: "#8e3a17", nether_bricks: "#2c1518",
+    end_stone: "#dbde9e", end_stone_bricks: "#dadc9e", purpur_block: "#a77ca7", oak_log: ["#a2834f", "#6b5235"], spruce_log: ["#6b5434", "#3b2611"], birch_log: ["#c5b77b", "#d7d7d2"],
+    jungle_log: "#55441c", acacia_log: "#676157", dark_oak_log: "#3c2e1a", oak_planks: "#a2834f", spruce_planks: "#735531", birch_planks: "#c0af79", dark_oak_planks: "#432b14",
+    oak_leaves: "#3e7a2a", spruce_leaves: "#3b5d3b", birch_leaves: "#5e8a3e", jungle_leaves: "#3a8a1e", dark_oak_leaves: "#2f6b1e", acacia_leaves: "#4a8a25",
+    water: "#3f76e4", lava: "#d96415", glass: "#c0e4f0", tinted_glass: "#2c2730", chest: "#a06a2c", trapped_chest: "#a06a2c", ender_chest: "#1e3436", barrel: "#8a6538",
+    crafting_table: "#8a5a32", furnace: "#6e6e6e", hopper: "#3d3d3d", dropper: "#6e6e6e", dispenser: "#6e6e6e", anvil: "#444444", enchanting_table: "#5a1e2e",
+    iron_block: "#d8d8d8", gold_block: "#f5da2e", diamond_block: "#61dbd5", emerald_block: "#2acb57", netherite_block: "#42393a", redstone_block: "#a81e09",
+    lapis_block: "#1f43a0", coal_block: "#151515", copper_block: "#c06c50", quartz_block: "#ebe5de", bookshelf: ["#a2834f", "#6c4f2c"], tnt: "#c2382a", sponge: "#c3c24b",
+    hay_block: "#a68b0c", pumpkin: "#c47414", melon: "#7a9c1c", cactus: "#5a8a2a", bone_block: "#e1ddc9", slime_block: "#6fbd5a", honey_block: "#f3a51e", sea_lantern: "#acc8be",
+    respawn_anchor: "#2b0b55", beacon: "#7de0d6", spawner: "#1f2b38", note_block: "#6b4a34", jukebox: "#6b4a34", target: "#e2aa9b", lodestone: "#77797c", scaffolding: "#c9a85a" };
+  const DEFAULT_ALPHA = { water: 0.6, glass: 0.32, ice: 0.75, tinted_glass: 0.7, slime_block: 0.8, honey_block: 0.8 };
+  const SKIP = /^(air|cave_air|void_air|light|barrier|structure_void|moving_piston)$|grass$|^tall_grass|fern$|flower|tulip|dandelion|poppy|orchid|allium|bluet|daisy|lilac|peony|rose_bush|sunflower|torch|button|lever|sign$|_sign|banner|rail$|_rail|redstone_wire|tripwire|vine|ladder|sapling|mushroom$|dead_bush|sugar_cane|kelp|seagrass|lily_pad|cobweb|fire$|frogspawn|glow_lichen|sculk_vein|string|_head$|_skull$|flower_pot|candle|bubble_column|end_rod|lantern$|chain$|repeater|comparator|daylight|_pane$|iron_bars|_fence$|_fence_gate|_wall$|_door$|_trapdoor$|wheat|carrots|potatoes|beetroots|stem$|berry_bush|bamboo$|pointed_dripstone|amethyst_cluster|_bud$/;
+  const THIN = /carpet$|pressure_plate$|^snow$|_slab$/;
+  function hexRgb(h) { const n = parseInt(h.slice(1), 16); return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255]; }
+  function cssRgb(x) {
+    if (x.startsWith("#")) return hexRgb(x);
+    const m = x.match(/hsl\((\d+),(\d+)%,(\d+)%\)/); if (!m) return [0.5, 0.5, 0.5];
+    const h = +m[1] / 360, s = +m[2] / 100, l = +m[3] / 100, q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
+    const f = (t) => { t = (t + 1) % 1; return t < 1 / 6 ? p + (q - p) * 6 * t : t < 1 / 2 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p; };
+    return [f(h + 1 / 3), f(h), f(h - 1 / 3)];
+  }
+  function blockCss(name) {
+    let c = BC[name];
+    if (!c) {
+      const dye = Object.keys(DYE).sort((a, b) => b.length - a.length).find((d) => name.startsWith(d + "_"));
+      if (dye) c = DYE[dye];
+      else if (name.includes("shulker_box")) c = "#976f9a";
+      else if (name.includes("bed")) c = "#b02e26";
+      else if (/ore$/.test(name)) c = name.includes("deepslate") ? "#4d4d50" : "#7d7d7d";
+      else if (/stairs|slab|wall/.test(name)) { const m = name.replace(/_(stairs|slab|wall)$/, ""); c = BC[m] || BC[m + "s"] || BC[m + "_planks"] || "#8a8a8a"; }
+      else if (/planks|log|wood/.test(name)) c = "#9a7a4a";
+      else if (/leaves/.test(name)) c = "#3e7a2a";
+      else if (/glass/.test(name)) c = "#c0e4f0";
+      else { let h = 0; for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0; c = `hsl(${h % 360},18%,${40 + (h >> 8) % 20}%)`; }
+    }
+    return Array.isArray(c) ? c : [c, c];
+  }
+  function classify(name) {
+    if (SKIP.test(name)) return { k: 0 };
+    const pair = blockCss(name), liquid = name === "water" || name === "lava";
+    const alpha = DEFAULT_ALPHA[name] || (/glass/.test(name) ? 0.32 : 1);
+    return { k: liquid ? 3 : alpha < 1 ? 2 : THIN.test(name) ? 4 : /chest|shulker_box|barrel/.test(name) ? 5 : 1, top: cssRgb(pair[0]), side: cssRgb(pair[1]), alpha };
+  }
+  const FACES = [
+    [[0, 1, 0], [[0, 1, 0], [0, 1, 1], [1, 1, 1], [1, 1, 0]], 1.0], [[0, -1, 0], [[0, 0, 0], [1, 0, 0], [1, 0, 1], [0, 0, 1]], 0.5],
+    [[1, 0, 0], [[1, 0, 0], [1, 1, 0], [1, 1, 1], [1, 0, 1]], 0.8], [[-1, 0, 0], [[0, 0, 0], [0, 0, 1], [0, 1, 1], [0, 1, 0]], 0.8],
+    [[0, 0, 1], [[0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1]], 0.68], [[0, 0, -1], [[0, 0, 0], [0, 1, 0], [1, 1, 0], [1, 0, 0]], 0.68]];
+  function buildWorld(b) {
+    const T = live.T, W = 2 * b.r + 1, H = b.up + b.down + 1;
+    const cells = new Uint16Array(W * H * W);
+    for (let i = 0, k = 0; i < b.rle.length; i += 2) { cells.fill(b.rle[i], k, k + b.rle[i + 1]); k += b.rle[i + 1]; }
+    const kinds = b.palette.map(classify);
+    const at = (x, y, z) => (x < -b.r || x > b.r || z < -b.r || z > b.r || y < -b.down || y > b.up) ? 0 : cells[((y + b.down) * W + (z + b.r)) * W + (x + b.r)];
+    const solidK = (k) => k === 1;
+    const out = { o: { p: [], c: [] }, t: { p: [], c: [] } };
+    for (let y = -b.down; y <= b.up; y++) for (let z = -b.r; z <= b.r; z++) for (let x = -b.r; x <= b.r; x++) {
+      const id = at(x, y, z), kd = kinds[id];
+      if (!kd.k) continue;
+      const hgt = kd.k === 4 ? 0.125 : kd.k === 3 ? 0.88 : 1, inset = kd.k === 5 ? 0.0625 : 0;
+      for (const [n, corners, shade] of FACES) {
+        const nid = at(x + n[0], y + n[1], z + n[2]), nk = kinds[nid].k;
+        let drawFace;
+        if (kd.k === 1) drawFace = !solidK(nk);
+        else if (kd.k === 2) drawFace = nid !== id && !solidK(nk);
+        else if (kd.k === 3) drawFace = nk !== 3 && !solidK(nk) && !(n[1] === -1);
+        else drawFace = !(solidK(nk) && n[1] !== 1) || kd.k === 5;
+        if (!drawFace) continue;
+        const col = n[1] === 1 ? kd.top : kd.side, buf = kd.k === 2 || kd.k === 3 ? out.t : out.o;
+        const jit = 0.9 + ((((x * 73856093) ^ (y * 19349663) ^ (z * 83492791)) >>> 0) % 100) / 1000, sh = shade * jit;
+        const v = corners.map(([cx, cy, cz]) => [x + (cx ? 1 - inset : inset), y + cy * (hgt - (kd.k === 5 ? 0.125 : 0)), z + (cz ? 1 - inset : inset)]);
+        for (const i of [0, 1, 2, 0, 2, 3]) { buf.p.push(...v[i]); buf.c.push(col[0] * sh, col[1] * sh, col[2] * sh); }
+      }
+    }
+    while (live.world.children.length) { const m = live.world.children.pop(); m.geometry.dispose(); m.material.dispose(); }
+    for (const [key, opts] of [["o", {}], ["t", { transparent: true, opacity: 0.55, depthWrite: false }]]) {
+      if (!out[key].p.length) continue;
+      const g = new T.BufferGeometry();
+      g.setAttribute("position", new T.Float32BufferAttribute(out[key].p, 3));
+      g.setAttribute("color", new T.Float32BufferAttribute(out[key].c, 3));
+      live.world.add(new T.Mesh(g, new T.MeshBasicMaterial(Object.assign({ vertexColors: true, side: key === "t" ? T.DoubleSide : T.FrontSide }, opts))));
+    }
+    // A new anchor: the bot's last pose belongs to the old one.
+    live.cur = null; live.target = null;
+  }
+  function label(text) {
+    const T = live.T, cv = document.createElement("canvas"), g = cv.getContext("2d");
+    cv.width = 256; cv.height = 64; g.font = "bold 30px sans-serif"; g.textAlign = "center"; g.textBaseline = "middle";
+    const w = Math.min(250, g.measureText(text).width + 24);
+    g.fillStyle = "rgba(0,0,0,.55)"; g.fillRect(128 - w / 2, 10, w, 44); g.fillStyle = "#fff"; g.fillText(text, 128, 33);
+    const sp = new T.Sprite(new T.SpriteMaterial({ map: new T.CanvasTexture(cv), depthTest: false })); sp.scale.set(2, 0.5, 1); return sp;
+  }
+  function setEnts(list) {
+    const T = live.T, g = live.ents;
+    while (g.children.length) { const m = g.children.pop(); m.traverse((o) => { if (o.geometry) o.geometry.dispose(); if (o.material) { if (o.material.map) o.material.map.dispose(); o.material.dispose(); } }); }
+    for (const e of list) {
+      const grp = new T.Group();
+      if (e.t === "player") {
+        const m = new T.Mesh(new T.BoxGeometry(0.6, 1.8, 0.35), new T.MeshBasicMaterial({ color: 0xc0392b })); m.position.y = 0.9; grp.add(m);
+        const l = label(e.n || "player"); l.position.y = 2.25; grp.add(l); grp.rotation.y = -(e.yaw || 0) * Math.PI / 180;
+      } else if (e.t === "item" || e.t === "pearl") {
+        const m = new T.Mesh(new T.BoxGeometry(0.25, 0.25, 0.25), new T.MeshBasicMaterial({ color: e.t === "pearl" ? 0x1f8f7a : 0xe8d27a })); m.position.y = 0.2; grp.add(m); grp.userData.spin = true;
+      } else {
+        const m = new T.Mesh(new T.BoxGeometry(0.7, 0.9, 0.7), new T.MeshBasicMaterial({ color: 0x5a7a3a })); m.position.y = 0.45; grp.add(m);
+      }
+      grp.position.set(e.x, e.y, e.z); g.add(grp);
     }
   }
-  // Players
-  for (const p of v.players || []) {
-    const px = sx(p.x), pz = sz(p.z);
-    ctx.fillStyle = "#ff5a4f"; ctx.beginPath(); ctx.arc(px, pz, 6, 0, Math.PI * 2); ctx.fill();
-    tag(ctx, p.name, px + 10, pz - 6, "#ff8b80");
-  }
-  // The bot: an arrow along its yaw (0 = south, +Z; 90 = west, -X).
-  const yaw = (v.yaw || 0) * Math.PI / 180, dx = -Math.sin(yaw), dz = Math.cos(yaw);
-  ctx.beginPath(); ctx.arc(W / 2, W / 2, 15, 0, Math.PI * 2);
-  ctx.fillStyle = "rgba(255,255,255,.18)"; ctx.fill(); ctx.strokeStyle = "rgba(255,255,255,.7)"; ctx.lineWidth = 1.5; ctx.stroke();
-  ctx.save(); ctx.translate(W / 2, W / 2); ctx.rotate(Math.atan2(dz, dx));
-  ctx.fillStyle = "#fff"; ctx.strokeStyle = "#000"; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.moveTo(13, 0); ctx.lineTo(-8, -8); ctx.lineTo(-4, 0); ctx.lineTo(-8, 8); ctx.closePath(); ctx.stroke(); ctx.fill();
-  ctx.restore();
-  // Scale bar
-  const bar = Math.round(scale * 10);
-  ctx.fillStyle = "rgba(10,12,14,.78)"; ctx.fillRect(8, W - 28, bar + 84, 20);
-  ctx.fillStyle = "#e3e7ea"; ctx.fillRect(14, W - 19, bar, 3); ctx.fillText("10 blocks", 22 + bar, W - 13);
-}
-function renderFacts(v) {
-  if (!v || !v.bot) { $("facts").innerHTML = '<div class="muted">Waiting for the bot.</div>'; return; }
-  const job = v.job || {};
-  const fresh = v.age < 5;
-  const rows = [
-    ["Bot", `${esc(v.bot)} <span style="display:inline;color:${fresh ? "var(--accent)" : "var(--warn)"}">${fresh ? "● live" : v.age + " s old"}</span>`],
-    ["Doing", esc(job.phase || "–") + (job.step ? " · " + esc(job.step) : "")],
-    ["Position", `${Math.round(v.x).toLocaleString()}, ${Math.round(v.y)}, ${Math.round(v.z).toLocaleString()} <span style="display:inline">${esc(v.dim)}</span>`],
-    ["Health · free slots", `${Math.round(v.health)} hp · ${v.freeSlots}`],
-  ];
-  if (job.target) rows.push(["Target", `#${job.target.id} ${esc(job.target.label || "")}<br>${job.target.x.toLocaleString()}, ${job.target.z.toLocaleString()} · ${Math.round(Math.hypot(job.target.x - v.x, job.target.z - v.z)).toLocaleString()} m`]);
-  if (job.containers) {
-    const done = job.containers.filter(c => c.state === "done").length;
-    rows.push(["Containers", `${done} of ${job.containers.length} done`]);
-  }
-  if (job.loot) rows.push(["Taken this visit", esc(job.loot)]);
-  if ((v.players || []).length) rows.push(["Players near", v.players.map(p => esc(p.name)).join(", ")]);
-  if (job.note) rows.push(["Last", esc(job.note)]);
-  $("facts").innerHTML = rows.map(([k, val]) => `<div><span>${k}</span>${val}</div>`).join("");
-}
-async function refreshView() {
-  try {
-    const r = await fetch("/ui/view");
-    const v = await r.json();
-    lastView = v && v.bot ? v : null;
-    drawView(); renderFacts(lastView);
-  } catch (e) { }
-}
-refreshView(); setInterval(refreshView, 1000);
+
+  setTab(["bot", "live", "map", "targets", "visits", "console", "setup"].includes(tab) ? tab : "bot");
+  refresh(); refreshView();
+})();
 </script>
 </body>
 </html>

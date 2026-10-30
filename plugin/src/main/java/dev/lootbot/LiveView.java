@@ -34,7 +34,15 @@ final class LiveView {
     private final LootConfig config;
     private final LearnerClient learner;
     private final AtomicBoolean busy = new AtomicBoolean();
+    private final AtomicBoolean eyesBusy = new AtomicBoolean();
     private int ticks;
+
+    // The bot's eyes: the blocks around an anchor (sent when the bot has moved away from it or the
+    // blocks may have changed), and the bot's pose against that anchor a few times a second.
+    private static final int EYES_R = 20, EYES_UP = 10, EYES_DOWN = 8;
+    private int eyesTicks, blocksTicks = 1_000_000;
+    private volatile int version;
+    private volatile int[] anchor;
 
     LiveView(LootConfig config, LearnerClient learner) {
         this.config = config;
@@ -44,7 +52,11 @@ final class LiveView {
     /** Every client tick (with or without a player on the proxy). {@code job} fills in the job's part. */
     void tick(String bot, LootJob job) {
         LootConfig.View c = config.view;
-        if (!c.enabled || !learner.configured() || ++ticks < Math.max(5, c.intervalTicks)) {
+        if (!c.enabled || !learner.configured()) {
+            return;
+        }
+        tickEyes(bot, job);
+        if (++ticks < Math.max(5, c.intervalTicks)) {
             return;
         }
         ticks = 0;
@@ -83,6 +95,174 @@ final class LiveView {
                 busy.set(false);
             }
         });
+    }
+
+    private void tickEyes(String bot, LootJob job) {
+        if (CACHE.getPlayerCache().getThePlayer() == null) {
+            return;
+        }
+        blocksTicks++;
+        if (++eyesTicks < 5) {
+            return;
+        }
+        eyesTicks = 0;
+        double x = LootJob.px(), y = LootJob.py(), z = LootJob.pz();
+        int[] a = anchor;
+        boolean moved = a == null || Math.abs(x - a[0]) > 6 || Math.abs(z - a[2]) > 6 || Math.abs(y - a[1]) > 4;
+        if ((moved && blocksTicks >= 10 || blocksTicks >= 100) && eyesBusy.compareAndSet(false, true)) {
+            blocksTicks = 0;
+            int[] na = {(int) Math.floor(x), (int) Math.floor(y), (int) Math.floor(z)};
+            int nv = version + 1;
+            JsonObject pose = pose(bot, job, nv, na);
+            WORKER.execute(() -> {
+                try {
+                    JsonObject msg = new JsonObject();
+                    msg.addProperty("bot", bot);
+                    msg.add("blocks", blocks(na));
+                    msg.add("pose", pose);
+                    msg.addProperty("v", nv);
+                    anchor = na;
+                    version = nv;
+                    learner.eyes(msg);
+                } catch (RuntimeException ignored) {
+                    // the chunks changed under the scan: the next one gets it
+                } finally {
+                    eyesBusy.set(false);
+                }
+            });
+            return;
+        }
+        if (a != null) {
+            JsonObject msg = new JsonObject();
+            msg.addProperty("bot", bot);
+            msg.addProperty("v", version);
+            msg.add("pose", pose(bot, job, version, a));
+            learner.eyes(msg);
+        }
+    }
+
+    /** The bot's position against the anchor, where it looks, what it's doing, and what's moving near it. */
+    private static JsonObject pose(String bot, LootJob job, int v, int[] a) {
+        JsonObject p = new JsonObject();
+        p.addProperty("v", v);
+        p.addProperty("x", LootJob.px() - a[0]);
+        p.addProperty("y", LootJob.py() - a[1]);
+        p.addProperty("z", LootJob.pz() - a[2]);
+        p.addProperty("yaw", CACHE.getPlayerCache().getYaw());
+        p.addProperty("pitch", CACHE.getPlayerCache().getPitch());
+        JsonObject info = job.viewInfo();
+        String step = info.has("step") ? info.get("phase").getAsString() + " - " + info.get("step").getAsString()
+                : info.get("phase").getAsString();
+        if (info.has("note") && !info.get("note").getAsString().isEmpty()) {
+            step += "  -  " + info.get("note").getAsString();
+        }
+        p.addProperty("step", step);
+        JsonArray ents = new JsonArray();
+        int self = CACHE.getPlayerCache().getEntityId();
+        try {
+            for (var e : new java.util.ArrayList<>(CACHE.getEntityCache().getEntities().values())) {
+                if (e == null || e.getEntityId() == self) {
+                    continue;
+                }
+                double dx = e.getX() - a[0], dy = e.getY() - a[1], dz = e.getZ() - a[2];
+                if (Math.abs(dx) > EYES_R + 4 || Math.abs(dz) > EYES_R + 4 || dy < -EYES_DOWN - 2 || dy > EYES_UP + 2) {
+                    continue;
+                }
+                String type = e.getEntityType() == null ? "" : e.getEntityType().name();
+                JsonObject o = new JsonObject();
+                if (e instanceof com.zenith.cache.data.entity.EntityPlayer pl) {
+                    if (pl.isSelfPlayer()) {
+                        continue;
+                    }
+                    o.addProperty("t", "player");
+                    o.addProperty("n", CACHE.getTabListCache().get(pl.getUuid()).map(t -> t.getName()).orElse("player"));
+                } else if (type.equals("ITEM")) {
+                    o.addProperty("t", "item");
+                } else if (type.equals("ENDER_PEARL")) {
+                    o.addProperty("t", "pearl");
+                } else if (type.endsWith("MINECART") || type.equals("ITEM_FRAME") || type.equals("ARMOR_STAND")) {
+                    continue;
+                } else {
+                    o.addProperty("t", "mob");
+                }
+                o.addProperty("x", dx);
+                o.addProperty("y", dy);
+                o.addProperty("z", dz);
+                o.addProperty("yaw", e.getYaw());
+                ents.add(o);
+                if (ents.size() >= 40) {
+                    break;
+                }
+            }
+        } catch (RuntimeException ignored) {
+            // the entity cache changed under us
+        }
+        p.add("ents", ents);
+        return p;
+    }
+
+    /** The blocks around the anchor by name, y then z then x, run-length coded against a palette. */
+    private static JsonObject blocks(int[] a) {
+        int w = 2 * EYES_R + 1;
+        Map<String, Integer> index = new HashMap<>();
+        JsonArray palette = new JsonArray();
+        index.put("air", 0);
+        palette.add("air");
+        JsonArray rle = new JsonArray();
+        int last = -1, run = 0;
+        Chunk chunk = null;
+        int chunkX = Integer.MIN_VALUE, chunkZ = Integer.MIN_VALUE;
+        for (int dy = -EYES_DOWN; dy <= EYES_UP; dy++) {
+            int wy = a[1] + dy;
+            for (int dz = -EYES_R; dz <= EYES_R; dz++) {
+                int wz = a[2] + dz;
+                for (int dx = -EYES_R; dx <= EYES_R; dx++) {
+                    int wx = a[0] + dx;
+                    int cx = wx >> 4, cz = wz >> 4;
+                    if (cx != chunkX || cz != chunkZ) {
+                        chunk = CACHE.getChunkCache().get(cx, cz);
+                        chunkX = cx;
+                        chunkZ = cz;
+                    }
+                    int id = 0;
+                    if (chunk != null && wy >= chunk.minY() && wy <= chunk.maxY()) {
+                        int state = chunk.getBlockStateId(wx & 15, wy, wz & 15);
+                        if (state != 0) {
+                            Block b = BLOCK_DATA.getBlockDataFromBlockStateId(state);
+                            if (b != null && !b.isAir()) {
+                                String n = b.name().startsWith("minecraft:") ? b.name().substring(10) : b.name();
+                                Integer k = index.get(n);
+                                if (k == null) {
+                                    k = palette.size();
+                                    index.put(n, k);
+                                    palette.add(n);
+                                }
+                                id = k;
+                            }
+                        }
+                    }
+                    if (id == last) {
+                        run++;
+                    } else {
+                        if (last >= 0) {
+                            rle.add(last);
+                            rle.add(run);
+                        }
+                        last = id;
+                        run = 1;
+                    }
+                }
+            }
+        }
+        rle.add(last);
+        rle.add(run);
+        JsonObject o = new JsonObject();
+        o.addProperty("r", EYES_R);
+        o.addProperty("up", EYES_UP);
+        o.addProperty("down", EYES_DOWN);
+        o.add("palette", palette);
+        o.add("rle", rle);
+        return o;
     }
 
     private static JsonArray players() {

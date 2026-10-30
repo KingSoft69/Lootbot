@@ -2,7 +2,16 @@
 
 Newest first. Each entry: what changed, the evidence for it, and what result would show it worked.
 
-## Dashboard: bot's eyes
+## 0.1.2
+
+The bot's eyes for the dashboard's Live tab: the plugin sends the blocks around the bot (20 out,
+10 up, 8 down, by name, run-length coded) whenever it has moved 6 blocks or every 5 seconds, and its
+position, look direction, what it's doing and the players, items and mobs near it four times a
+second. The dashboard rebuilds that in 3D (Bot's eyes, Behind, Orbit, Above). The dashboard itself
+now matches the GridFly and StashBot pages: tabs for Bot, Live, Map, Targets, Visits, Console and
+Setup, light and dark. No change to how the bot loots.
+
+## Dashboard: watch in Minecraft
 
 "Join to watch" sets ZenithProxy up so joining localhost puts you in as a spectator looking through
 the bot's camera (spectator on, your name on the spectator whitelist, player camera on join, and

@@ -233,6 +233,17 @@ class Dashboard:
         v = max(views, key=lambda x: x.get("receivedAt", 0))
         return {**v, "age": round(time.time() - v.get("receivedAt", 0), 1)}
 
+    def eyes(self, since=-1):
+        """What the freshest bot sees: its pose, and the blocks around it when the client's copy is old."""
+        live = [e for e in self.learner.eyes.values() if e.get("blocks") is not None]
+        if not live:
+            return {"waiting": True}
+        e = max(live, key=lambda x: x.get("at", 0))
+        out = {"v": e["v"], "pose": e.get("pose"), "age": round(time.time() - e.get("at", 0), 1)}
+        if since != e["v"]:
+            out["blocks"] = e["blocks"]
+        return out
+
     def post(self, path, body):
         if path == "/ui/zenith/start":
             return {"msg": self.zenith.start()}
