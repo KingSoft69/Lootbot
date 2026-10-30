@@ -114,6 +114,19 @@
     </div>
 
     <div class="card">
+      <h2>Bot's eyes</h2>
+      <div class="muted" style="font-size:12.5px;margin-bottom:8px">Join localhost in Minecraft as a spectator and see exactly what the bot sees, while it keeps working.</div>
+      <div class="cmdrow" style="margin:0 0 8px">
+        <input id="mcName" placeholder="Your Minecraft name" autocomplete="off">
+      </div>
+      <div class="btns">
+        <button class="go" id="watchBtn" onclick="watchMode(true)">Join to watch<small>spectate as the bot</small></button>
+        <button id="controlBtn" onclick="watchMode(false)">Join to control<small>for gear, kit, home</small></button>
+      </div>
+      <div class="muted" id="watchNote" style="font-size:12px;margin-top:8px"></div>
+    </div>
+
+    <div class="card">
       <details id="firstTime">
         <summary>First time</summary>
         <ol class="steps" style="margin-top:10px">
@@ -121,6 +134,7 @@
           <li>Join <b>localhost</b> in Minecraft. Give the bot its gear (elytra, rockets, food, pickaxe, totems) and stand it next to empty chests or barrels.</li>
           <li><b>Save kit</b>, then <b>Set home here</b>.</li>
           <li>Disconnect from the proxy (the bot only works while nobody controls it) and press <b>Start looting</b>.</li>
+          <li>To watch it work, put in your Minecraft name, press <b>Join to watch</b> and join localhost again.</li>
         </ol>
       </details>
     </div>
@@ -140,7 +154,7 @@
     </div>
 
     <div class="card">
-      <h2>Live view <span class="zoom"><button class="mini" data-zoom="1">1x</button><button class="mini" data-zoom="1.6">2x</button><button class="mini" data-zoom="2.6">3x</button></span></h2>
+      <h2>Live map <span class="zoom"><button class="mini" data-zoom="1">1x</button><button class="mini" data-zoom="1.6">2x</button><button class="mini" data-zoom="2.6">3x</button></span></h2>
       <div class="live">
         <div class="mapwrap"><canvas id="map" width="720" height="720"></canvas><div class="mapmsg" id="mapMsg">No live view yet. It appears once the bot is in game with LootBot loaded.</div></div>
         <div class="facts" id="facts"></div>
@@ -225,6 +239,31 @@ function sendCmd(text) {
 }
 $("cmd").addEventListener("keydown", e => { if (e.key === "Enter") sendCmd(); });
 document.querySelectorAll("[data-cmd]").forEach(b => b.addEventListener("click", () => sendCmd(b.dataset.cmd)));
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+try { $("mcName").value = localStorage.getItem("mcName") || ""; } catch (e) { }
+async function cmdSeq(list) {
+  for (const c of list) {
+    await fetch("/ui/zenith/cmd", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({cmd: c})});
+    await sleep(400);
+  }
+}
+async function watchMode(watch) {
+  const name = $("mcName").value.trim();
+  if (watch && !/^[A-Za-z0-9_]{3,16}$/.test(name)) { toast("Enter your Minecraft name first"); return; }
+  try { localStorage.setItem("mcName", name); } catch (e) { }
+  if (watch) {
+    // Spectators see through the bot's camera and don't take control, so the bot keeps looting.
+    await cmdSeq(["spectator on", `spectator whitelist add ${name}`, "spectator playerCamOnJoin on",
+                  "serverConnection preferLoginAsController off"]);
+    $("watchNote").textContent = "Now join localhost: you'll be inside the bot's view. Leave any time; the bot carries on.";
+    toast("Watch mode set");
+  } else {
+    await cmdSeq(["serverConnection preferLoginAsController on"]);
+    $("watchNote").textContent = "Now joining localhost takes control (the bot pauses while you're on). Disconnect to let it work again.";
+    toast("Control mode set");
+  }
+  refresh();
+}
 function addTarget() {
   const x = parseInt($("addX").value), z = parseInt($("addZ").value);
   if (isNaN(x) || isNaN(z)) { toast("Enter X and Z"); return; }
@@ -248,6 +287,7 @@ function render(s) {
   $("pxText").textContent = z.running ? "running " + ago(z.uptime) : (z.installed ? "stopped" : "not installed");
   $("startPx").disabled = z.running || !z.installed; $("stopPx").disabled = !z.running;
   document.querySelectorAll("[data-cmd]").forEach(b => b.disabled = !z.running);
+  $("watchBtn").disabled = $("controlBtn").disabled = !z.running;
   $("conInfo").textContent = z.restarts ? z.restarts + " restart(s)" : "";
 
   const b = s.bots[0];

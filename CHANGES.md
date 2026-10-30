@@ -2,6 +2,12 @@
 
 Newest first. Each entry: what changed, the evidence for it, and what result would show it worked.
 
+## Dashboard: bot's eyes
+
+"Join to watch" sets ZenithProxy up so joining localhost puts you in as a spectator looking through
+the bot's camera (spectator on, your name on the spectator whitelist, player camera on join, and
+spectator before controller), while the bot keeps looting. "Join to control" puts it back.
+
 ## 0.1.1
 
 Live view for the local dashboard: about once a second the plugin sends a top-down map of the
