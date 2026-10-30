@@ -13,7 +13,8 @@ reads the learner's report and ships one improvement, with nobody watching.
 - `learner/` Python 3.11+, standard library only. `server.py` (HTTP + background loop), `tuner.py`
   (hill climber over `space.json`), `targets.py` (queue and outcome rules), `deploy.py` (releases,
   canary, rollback), `values.py` + `values.json` (item points, reward), `reports.py`, `findsbot.py`
-  (targets from the Discord finds bot, visited marks back), `gridfly.py` (targets from the GridFly server's finds over its operator websocket, looted marks back).
+  (targets from the Discord finds bot, visited marks back), `dashboard.py` + `static/dashboard.html` (local dashboard that also runs ZenithProxy),
+  `gridfly.py` (targets from the GridFly server's finds over its operator websocket, looted marks back).
 - `deploy/` systemd unit for the learner, `watchdog.py` (cron on the droplets: puts the previous jar
   back when a new one is bad or never loads).
 

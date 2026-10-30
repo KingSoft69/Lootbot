@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LootBot</title>
+<style>
+  :root {
+    --bg: #0f1214; --panel: #171b1f; --panel2: #1d2227; --line: #2a3138; --text: #e3e7ea; --dim: #8b959e;
+    --accent: #5fd38d; --accent-dim: #2e6b47; --warn: #e8b04b; --bad: #e0675f; --blue: #6aa8e8;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, "Segoe UI", sans-serif; }
+  header { display: flex; align-items: center; gap: 14px; padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 2; flex-wrap: wrap; }
+  header h1 { font-size: 17px; margin: 0 10px 0 0; letter-spacing: .3px; }
+  header h1 span { color: var(--accent); }
+  .pill { display: inline-flex; align-items: center; gap: 7px; padding: 4px 10px; border-radius: 999px; background: var(--panel2); border: 1px solid var(--line); font-size: 12.5px; color: var(--dim); }
+  .pill b { color: var(--text); font-weight: 600; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--dim); }
+  .dot.on { background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+  .dot.warn { background: var(--warn); } .dot.bad { background: var(--bad); }
+  main { display: grid; grid-template-columns: 340px 1fr; gap: 16px; padding: 16px 20px 40px; max-width: 1500px; margin: 0 auto; }
+  @media (max-width: 980px) { main { grid-template-columns: 1fr; } }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; margin-bottom: 16px; }
+  .card h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--dim); margin: 0 0 10px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+  .btns { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .btns.one { grid-template-columns: 1fr; }
+  button { font: inherit; color: var(--text); background: var(--panel2); border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; cursor: pointer; text-align: left; }
+  button:hover:not(:disabled) { border-color: #3c4650; background: #222830; }
+  button:disabled { opacity: .45; cursor: default; }
+  button.go { background: var(--accent-dim); border-color: #3f8a5e; }
+  button.go:hover:not(:disabled) { background: #367a52; }
+  button.stop { border-color: #6b3a36; }
+  button small { display: block; color: var(--dim); font-size: 11.5px; margin-top: 1px; }
+  button.mini { padding: 3px 8px; font-size: 12px; }
+  .label { font-size: 11.5px; color: var(--dim); margin: 12px 0 6px; }
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 16px; }
+  @media (max-width: 700px) { .tiles { grid-template-columns: repeat(2, 1fr); } }
+  .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .tile .v { font-size: 24px; font-weight: 650; font-variant-numeric: tabular-nums; }
+  .tile .k { font-size: 12px; color: var(--dim); }
+  #console { height: 330px; overflow-y: auto; background: #0b0d0f; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font: 12.5px/1.45 var(--mono); white-space: pre-wrap; word-break: break-word; }
+  #console .me { color: var(--blue); } #console .sys { color: var(--warn); } #console .loot { color: var(--accent); }
+  .cmdrow { display: flex; gap: 8px; margin-top: 8px; }
+  input { font: inherit; color: var(--text); background: #0b0d0f; border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; flex: 1; min-width: 0; }
+  input:focus, button:focus-visible { outline: 2px solid var(--accent-dim); outline-offset: 1px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; color: var(--dim); font-weight: 500; font-size: 12px; padding: 4px 8px 6px; border-bottom: 1px solid var(--line); }
+  td { padding: 6px 8px; border-bottom: 1px solid #20262b; vertical-align: top; }
+  td.num { font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 12.5px; }
+  .tag { display: inline-block; padding: 1px 7px; border-radius: 5px; font-size: 11.5px; background: var(--panel2); border: 1px solid var(--line); color: var(--dim); }
+  .tag.high { color: #ff8b80; border-color: #6b3a36; } .tag.moderate { color: var(--warn); border-color: #6b5530; } .tag.low { color: var(--accent); border-color: var(--accent-dim); }
+  .tag.on { color: var(--blue); border-color: #345a80; }
+  .muted { color: var(--dim); }
+  .scroll { max-height: 360px; overflow-y: auto; }
+  .ev { padding: 5px 0; border-bottom: 1px solid #20262b; font-size: 13px; }
+  .ev .muted { font-size: 12px; }
+  .steps { margin: 0; padding-left: 18px; color: var(--dim); font-size: 13px; }
+  .steps li { margin-bottom: 5px; } .steps b { color: var(--text); font-weight: 600; }
+  details summary { cursor: pointer; color: var(--dim); font-size: 12px; text-transform: uppercase; letter-spacing: .8px; font-weight: 600; }
+  #toast { position: fixed; bottom: 18px; right: 18px; background: var(--panel2); border: 1px solid var(--line); padding: 9px 14px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: 420px; }
+  #toast.show { opacity: 1; }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: 12.5px; }
+  .kv span:nth-child(odd) { color: var(--dim); }
+  .addrow { display: flex; gap: 6px; margin-top: 10px; }
+  .addrow input { padding: 6px 8px; font-size: 13px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Loot<span>Bot</span></h1>
+  <span class="pill"><span class="dot" id="pxDot"></span>Proxy <b id="pxText">…</b></span>
+  <span class="pill"><span class="dot" id="botDot"></span>Bot <b id="botText">not seen yet</b></span>
+  <span class="pill"><span class="dot" id="srcDot"></span>Finds <b id="srcText">…</b></span>
+  <span class="pill">Version <b id="verText">–</b></span>
+</header>
+
+<main>
+  <div>
+    <div class="card">
+      <h2>Proxy</h2>
+      <div class="btns">
+        <button class="go" id="startPx" onclick="post('/ui/zenith/start')">Start<small>ZenithProxy</small></button>
+        <button class="stop" id="stopPx" onclick="post('/ui/zenith/stop')">Stop<small>shuts it down</small></button>
+      </div>
+      <div class="label">Account</div>
+      <div class="btns one">
+        <button data-cmd="connect">Log in / connect<small>first time: shows a code for microsoft.com/link</small></button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Looting</h2>
+      <div class="btns">
+        <button class="go" data-cmd="loot start">Start looting<small>takes targets</small></button>
+        <button class="stop" data-cmd="loot stop">Stop looting<small>stays logged in</small></button>
+        <button data-cmd="loot kit">Save kit<small>what it carries now</small></button>
+        <button data-cmd="loot home here">Set home here<small>unload spot</small></button>
+        <button data-cmd="loot status">Status<small>in the console</small></button>
+        <button onclick="post('/ui/finds/sync')">Sync finds<small>from Discord now</small></button>
+      </div>
+    </div>
+
+    <div class="card">
+      <details id="firstTime">
+        <summary>First time</summary>
+        <ol class="steps" style="margin-top:10px">
+          <li><b>Start</b> the proxy, then <b>Log in</b> and follow the code in the console.</li>
+          <li>Join <b>localhost</b> in Minecraft. Give the bot its gear (elytra, rockets, food, pickaxe, totems) and stand it next to empty chests or barrels.</li>
+          <li><b>Save kit</b>, then <b>Set home here</b>.</li>
+          <li>Disconnect from the proxy (the bot only works while nobody controls it) and press <b>Start looting</b>.</li>
+        </ol>
+      </details>
+    </div>
+
+    <div class="card">
+      <h2>Best settings so far</h2>
+      <div class="kv" id="best"></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="tiles">
+      <div class="tile"><div class="v" id="tEp">0</div><div class="k">targets visited (24 h)</div></div>
+      <div class="tile"><div class="v" id="tPts">0</div><div class="k">loot points (24 h)</div></div>
+      <div class="tile"><div class="v" id="tOpen">0</div><div class="k">targets waiting</div></div>
+      <div class="tile"><div class="v" id="tDeaths">0</div><div class="k">deaths (24 h)</div></div>
+    </div>
+
+    <div class="card">
+      <h2>Console <span class="muted" id="conInfo"></span></h2>
+      <div id="console"></div>
+      <div class="cmdrow">
+        <input id="cmd" placeholder="Type a ZenithProxy command (e.g. loot status, help) and press Enter" autocomplete="off">
+        <button class="go" onclick="sendCmd()">Send</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Targets <span class="muted" id="tgtCounts"></span></h2>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>Find</th><th>Coords</th><th>Distance</th><th>Tries</th><th>State</th><th></th></tr></thead>
+          <tbody id="tgts"></tbody>
+        </table>
+      </div>
+      <div class="addrow">
+        <input id="addX" placeholder="X" inputmode="numeric" style="max-width:110px">
+        <input id="addZ" placeholder="Z" inputmode="numeric" style="max-width:110px">
+        <input id="addLabel" placeholder="label (optional)">
+        <button onclick="addTarget()">Add target</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Recent visits</h2>
+      <div class="scroll">
+        <table>
+          <thead><tr><th>When</th><th>Target</th><th>Result</th><th>Points</th><th>Taken</th></tr></thead>
+          <tbody id="eps"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Log</h2>
+      <div class="scroll" id="events"></div>
+    </div>
+  </div>
+</main>
+<div id="toast"></div>
+
+<script>
+let after = 0, botPos = null, firstState = true;
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function ago(s) {
+  if (s < 60) return s + " s";
+  if (s < 3600) return Math.round(s / 60) + " min";
+  if (s < 86400) return Math.round(s / 3600) + " h";
+  return Math.round(s / 86400) + " d";
+}
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast.timer); toast.timer = setTimeout(() => t.classList.remove("show"), 3500);
+}
+async function post(path, body) {
+  try {
+    const r = await fetch(path, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body || {})});
+    const j = await r.json();
+    toast(j.msg || j.error || "done");
+  } catch (e) { toast("The learner is not answering"); }
+  refresh();
+}
+function sendCmd(text) {
+  const c = text ?? $("cmd").value;
+  if (!c.trim()) return;
+  post("/ui/zenith/cmd", {cmd: c});
+  if (text === undefined) $("cmd").value = "";
+}
+$("cmd").addEventListener("keydown", e => { if (e.key === "Enter") sendCmd(); });
+document.querySelectorAll("[data-cmd]").forEach(b => b.addEventListener("click", () => sendCmd(b.dataset.cmd)));
+function addTarget() {
+  const x = parseInt($("addX").value), z = parseInt($("addZ").value);
+  if (isNaN(x) || isNaN(z)) { toast("Enter X and Z"); return; }
+  post("/ui/targets/add", {x, z, label: $("addLabel").value});
+  $("addX").value = $("addZ").value = $("addLabel").value = "";
+}
+function prio(label) {
+  const l = (label || "").toLowerCase();
+  if (l.startsWith("high")) return "high"; if (l.startsWith("moderate")) return "moderate"; if (l.startsWith("low")) return "low";
+  return "";
+}
+function lineClass(t) {
+  if (t.startsWith("> ")) return "me";
+  if (t.startsWith("---")) return "sys";
+  if (t.includes("LootBot")) return "loot";
+  return "";
+}
+function render(s) {
+  const z = s.zenith;
+  $("pxDot").className = "dot " + (z.running ? "on" : (z.installed ? "" : "bad"));
+  $("pxText").textContent = z.running ? "running " + ago(z.uptime) : (z.installed ? "stopped" : "not installed");
+  $("startPx").disabled = z.running || !z.installed; $("stopPx").disabled = !z.running;
+  document.querySelectorAll("[data-cmd]").forEach(b => b.disabled = !z.running);
+  $("conInfo").textContent = z.restarts ? z.restarts + " restart(s)" : "";
+
+  const b = s.bots[0];
+  if (b) {
+    const fresh = b.ago < 180;
+    $("botDot").className = "dot " + (fresh ? "on" : "warn");
+    const hp = b.health != null ? Math.round(b.health) + " hp" : "";
+    const pos = b.x != null ? `${Math.round(b.x)}, ${Math.round(b.z)}` : "";
+    $("botText").textContent = `${b.name} · ${fresh ? "active" : "seen " + ago(b.ago) + " ago"}${hp ? " · " + hp : ""}${b.freeSlots != null ? " · " + b.freeSlots + " free" : ""}${pos ? " · " + pos : ""}`;
+    botPos = b.x != null ? [b.x, b.z] : null;
+  }
+  $("srcDot").className = "dot " + (s.sources.discord ? "on" : "warn");
+  $("srcText").textContent = [s.sources.discord && "Discord", s.sources.gridfly && "GridFly"].filter(Boolean).join(" + ") || "none set";
+  $("verText").textContent = s.live || "–";
+
+  $("tEp").textContent = s.day.episodes; $("tPts").textContent = s.day.points.toLocaleString();
+  $("tDeaths").textContent = s.day.deaths; $("tOpen").textContent = s.targets.counts.open || 0;
+  const c = s.targets.counts;
+  $("tgtCounts").textContent = Object.entries(c).map(([k, v]) => `${v} ${k}`).join(" · ");
+
+  $("tgts").innerHTML = s.targets.open.map(t => {
+    const p = prio(t.label);
+    const d = botPos ? Math.round(Math.hypot(t.x - botPos[0], t.z - botPos[1])).toLocaleString() : "–";
+    const state = t.assigned_to ? `<span class="tag on">on it: ${esc(t.assigned_to)}</span>`
+      : t.parked ? `<span class="tag">back in ${ago(t.parked)}</span>` : (t.last_outcome ? `<span class="muted">${esc(t.last_outcome)}</span>` : "");
+    return `<tr><td>${p ? `<span class="tag ${p}">${p}</span> ` : ""}${esc((t.label || "").replace(/^(high|moderate|low)( priority)?\s*-?\s*/i, "")) || '<span class="muted">' + esc(t.source) + "</span>"}</td>
+      <td class="num">${t.x}, ${t.z}${t.dim !== "overworld" ? " " + esc(t.dim) : ""}</td><td class="num">${d}</td><td class="num">${t.attempts}</td>
+      <td>${state}</td><td><button class="mini" onclick="post('/ui/targets/${t.id}/skip')">Skip</button></td></tr>`;
+  }).join("") || `<tr><td colspan="6" class="muted">No targets waiting. Finds from Discord show up here within 5 minutes.</td></tr>`;
+
+  $("eps").innerHTML = s.episodes.map(e => `<tr><td class="muted">${ago(e.ago)} ago</td><td class="num">#${e.target_id}</td>
+    <td>${esc(e.outcome)}</td><td class="num">${Math.round(e.value || 0)}</td><td>${esc(e.items) || '<span class="muted">nothing</span>'}</td></tr>`).join("")
+    || `<tr><td colspan="5" class="muted">No visits yet.</td></tr>`;
+
+  $("events").innerHTML = s.events.map(e => `<div class="ev"><span class="muted">${ago(e.ago)} ago · ${esc(e.bot || "learner")} · ${esc(e.kind)}</span><br>${esc(e.text)}</div>`).join("")
+    || `<div class="muted">Nothing yet.</div>`;
+
+  $("best").innerHTML = Object.entries(s.best).filter(([k]) => k !== "wanted").map(([k, v]) => `<span>${esc(k)}</span><span>${esc(v)}</span>`).join("");
+
+  if (z.lines.length) {
+    const con = $("console");
+    const atBottom = con.scrollHeight - con.scrollTop - con.clientHeight < 40;
+    const frag = document.createDocumentFragment();
+    for (const l of z.lines) {
+      const div = document.createElement("div");
+      div.className = lineClass(l.t); div.textContent = l.t || " ";
+      frag.appendChild(div); after = l.n;
+    }
+    con.appendChild(frag);
+    while (con.childNodes.length > 1500) con.removeChild(con.firstChild);
+    if (atBottom || firstState) con.scrollTop = con.scrollHeight;
+  }
+  if (firstState && !b) $("firstTime").open = true;
+  firstState = false;
+}
+async function refresh() {
+  try {
+    const r = await fetch("/ui/state?after=" + after);
+    render(await r.json());
+  } catch (e) {
+    $("pxText").textContent = "learner not answering"; $("pxDot").className = "dot bad";
+  }
+}
+refresh(); setInterval(refresh, 2000);
+</script>
+</body>
+</html>

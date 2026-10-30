@@ -172,7 +172,7 @@ class Learner:
         return md
 
 
-def make_handler(learner):
+def make_handler(learner, dashboard=None):
     cfg = learner.config
 
     class Handler(BaseHTTPRequestHandler):
@@ -201,6 +201,11 @@ def make_handler(learner):
 
         def do_POST(self):
             try:
+                if dashboard is not None and self.path.startswith("/ui/"):
+                    if not dashboard.local(self):
+                        return self._send(403, {"error": "the dashboard only answers this computer"})
+                    out = dashboard.post(self.path, self._body())
+                    return self._send(200 if out is not None else 404, out or {"error": "no"})
                 if self.path == "/api/next" and self._auth(cfg["botToken"]):
                     return self._send(200, learner.next(self._body()))
                 if self.path == "/api/episode" and self._auth(cfg["botToken"]):
@@ -220,6 +225,14 @@ def make_handler(learner):
 
         def do_GET(self):
             try:
+                if dashboard is not None and (self.path in ("/", "/index.html") or self.path.startswith("/ui/")):
+                    if not dashboard.local(self):
+                        return self._send(403, {"error": "the dashboard only answers this computer"})
+                    if self.path in ("/", "/index.html"):
+                        return self._send(200, dashboard.page(), "text/html; charset=utf-8")
+                    if self.path.startswith("/ui/state"):
+                        after = int((self.path.split("after=", 1) + ["0"])[1] or 0) if "after=" in self.path else 0
+                        return self._send(200, dashboard.state(after))
                 if self.path.startswith("/jar/") and self._auth(cfg["botToken"], cfg["operatorToken"]):
                     path = learner.deployer.jar_path(self.path[5:])
                     if not path or not path.exists():
@@ -239,9 +252,18 @@ def make_handler(learner):
     return Handler
 
 
-def serve(data_dir):
+def serve(data_dir, zenith_dir=None, open_page=False):
     learner = Learner(data_dir)
     cfg = learner.config
+    dashboard = None
+    if zenith_dir is not None:
+        from .dashboard import Dashboard, Zenith, open_browser
+        zenith = Zenith(zenith_dir, log=learner.log, env={
+            # The java channel (plugins need it), MC 1.21.4, no Discord bot of its own.
+            "ZENITH_PLATFORM": "java", "ZENITH_MC_VERSION": "1.21.4", "ZENITH_DISCORD_DISABLED": "true"})
+        dashboard = Dashboard(learner, zenith)
+        import atexit
+        atexit.register(zenith.shutdown)
 
     def loop():
         while True:
@@ -252,6 +274,14 @@ def serve(data_dir):
             time.sleep(60)
 
     threading.Thread(target=loop, name="learner-loop", daemon=True).start()
-    httpd = ThreadingHTTPServer((cfg["host"], int(cfg["port"])), make_handler(learner))
+    httpd = ThreadingHTTPServer((cfg["host"], int(cfg["port"])), make_handler(learner, dashboard))
     learner.log(f"lootlearner on {cfg['host']}:{cfg['port']} (data in {learner.data_dir})")
-    httpd.serve_forever()
+    if dashboard is not None:
+        url = f"http://127.0.0.1:{cfg['port']}/"
+        learner.log(f"dashboard: {url}")
+        if open_page:
+            threading.Timer(1.5, open_browser, args=(url,)).start()
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        pass

@@ -1,6 +1,7 @@
 """python -m lootlearner <command>
 
   serve                          run the learner (HTTP API and the background loop)
+  dashboard --zenith <folder>    run the learner with the local dashboard, which also runs ZenithProxy
   tokens                         print the bot and operator tokens
   targets add <x> <z> [--y Y] [--dim D] [--label L] [--source S]
   targets import <file.csv> [--source S]
@@ -24,6 +25,9 @@ def main(argv=None):
     p.add_argument("--data", default="data", help="data folder (config, database, jars, reports)")
     sub = p.add_subparsers(dest="cmd", required=True)
     sub.add_parser("serve")
+    d = sub.add_parser("dashboard")
+    d.add_argument("--zenith", required=True, help="the ZenithProxy launcher folder")
+    d.add_argument("--no-browser", action="store_true")
     sub.add_parser("tokens")
     t = sub.add_parser("targets")
     tsub = t.add_subparsers(dest="tcmd", required=True)
@@ -52,6 +56,9 @@ def main(argv=None):
 
     if args.cmd == "serve":
         serve(args.data)
+        return 0
+    if args.cmd == "dashboard":
+        serve(args.data, zenith_dir=args.zenith, open_page=not args.no_browser)
         return 0
     if args.cmd == "tokens":
         cfg = load_config(args.data)

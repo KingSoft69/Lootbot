@@ -85,6 +85,14 @@ python3 -m lootlearner --data /root/lootbot/data targets gridfly gridfly-copy.db
 python3 -m lootlearner --data /root/lootbot/data report
 ```
 
+## On your own computer, with the dashboard
+
+`python3 -m lootlearner --data data dashboard --zenith <ZenithProxy launcher folder>` runs the learner
+and a dashboard at http://127.0.0.1:25700/ that also starts and stops ZenithProxy, shows its console,
+takes commands, and has buttons for the setup steps (log in, save kit, set home, start looting). It
+lists the targets waiting, the visits so far and what was taken. The dashboard only answers the
+computer it runs on.
+
 ## Plugin (each ZenithProxy)
 
 Build with `cd plugin && ./gradlew build` (or take the jar from a release), drop
