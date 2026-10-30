@@ -15,6 +15,7 @@ class FakeFindsBot:
         self.finds = [
             {"id": "111", "title": "big stash", "priority": "High", "x": 1500, "z": 0, "url": "https://discord/1"},
             {"id": "222", "title": "chests", "priority": "Low", "x": 100, "z": 100, "url": "https://discord/2"},
+            {"id": "333", "title": "Moderate priority - X24,057 Z24,691 (End)", "priority": "Moderate", "x": 24057, "z": 24691},
         ]
         self.visited = []
         bot = self
@@ -72,8 +73,10 @@ class FindsBotTest(unittest.TestCase):
         self.tmp.cleanup()
 
     def test_finds_become_targets_and_get_marked_visited(self):
-        self.assertEqual(self.learner.findsbot.run()[:3], (2, 0, 0))
-        self.assertEqual(self.learner.findsbot.run()[:3], (0, 2, 0))
+        self.assertEqual(self.learner.findsbot.run()[:3], (3, 0, 0))
+        self.assertEqual(self.learner.findsbot.run()[:3], (0, 3, 0))
+        ends = self.learner.db.all("SELECT dim FROM targets WHERE x = 24057")
+        self.assertEqual(ends[0]["dim"], "end")
         # High priority wins over a closer Low one.
         w = self.learner.next({"bot": "BotA", "version": "0.1.0", "state": {"x": 0, "z": 0, "dim": "overworld"}})
         self.assertEqual((w["target"]["x"], w["target"]["z"]), (1500, 0))

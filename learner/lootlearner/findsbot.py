@@ -73,7 +73,9 @@ def import_finds(db, finds, now=None):
                 c.execute("UPDATE targets SET label = ?, weight = ? WHERE id = ?", (label, weight, existing["id"]))
             refreshed += 1
             continue
-        tid = targets_mod.add(db, x, z, None, "overworld", label, "discord:" + (prio or "unrated"))
+        # Finds are overworld coordinates, except the ones whose title says "(End)".
+        dim = "end" if "(end)" in str(f.get("title") or "").lower() else "overworld"
+        tid = targets_mod.add(db, x, z, None, dim, label, "discord:" + (prio or "unrated"))
         with db.tx() as c:
             # A spot already known from elsewhere keeps its record and takes the Discord link.
             c.execute("UPDATE targets SET ext_key = ?, ext_ids = ?, weight = MAX(COALESCE(weight, 0), ?) WHERE id = ?",
