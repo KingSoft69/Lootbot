@@ -1,0 +1,81 @@
+# LootBot
+
+Bots that loot known 2b2t bases and get better at it on their own.
+
+```
+  ZenithProxy + LootBot plugin  ──  /api/next, /api/episode  ──►  learner (droplet)
+        ▲   loots a target, reports what happened                │ tunes settings, picks targets,
+        │                                                        │ canaries new jars, writes reports
+        └──── new jar (canary first, rolled back if worse) ◄─────┤
+                                                                 ▼
+                         reports branch ──► scheduled review (Claude): one fix per run,
+                                            CI, tag ──► GitHub release ──► learner
+```
+
+Three loops, fastest first:
+
+1. **Settings** (every episode). The learner hands each target out with a set of settings and scores
+   the result as loot points per hour. Settings that do better become the default; variants keep
+   being tried. Ten settings are tuned (`learner/space.json`): search radius, how long to wait for
+   chunks, container order, timeouts, retries, whether to break shulker boxes, and so on.
+2. **Targets** (every episode). Bases that turn out empty, unreachable or guarded are parked or
+   dropped; sources whose bases tend to hold loot are visited first.
+3. **Code** (scheduled). A Claude session reads the report, makes one change for the most common
+   failure, gets it through CI and tags a release. The learner runs it on one canary bot, then
+   promotes it or rolls it back on the numbers. `CLAUDE.md` has the rules it works to.
+
+## Learner (on a droplet)
+
+```
+git clone <this repo> /root/lootbot && cd /root/lootbot/learner
+python3 -m lootlearner --data /root/lootbot/data tokens     # makes data/config.json, prints the tokens
+```
+
+In `data/config.json` set `github.repo` (owner/LootBot) and `github.token`: a fine-grained token
+with Contents read and write on this repository only. It lets the learner download releases and
+push the reports the review loop reads. Then run it under systemd:
+
+```
+cp /root/lootbot/deploy/lootlearner.service /etc/systemd/system/
+systemctl enable --now lootlearner
+```
+
+Port 25700 should only be open to the droplets the bots run on (`ufw allow from <ip> to any port 25700`).
+
+Targets, by hand or from a CSV with `x,z` columns (and optional `y`, `dim`, `label`, `source`):
+
+```
+python3 -m lootlearner --data /root/lootbot/data targets add 120000 -45000 --label "stash" --source finds
+python3 -m lootlearner --data /root/lootbot/data targets import finds.csv --source gridfly
+python3 -m lootlearner --data /root/lootbot/data report
+```
+
+## Plugin (each ZenithProxy)
+
+Build with `cd plugin && ./gradlew build` (or take the jar from a release), drop
+`LootBot-<version>.jar` into `plugins/`, restart the proxy, then:
+
+```
+loot learner http://<learner ip>:25700 <bot token>
+loot kit                      # what the bot carries now is its kit: everything else is loot
+loot home here                # loot goes into chests/barrels within 8 blocks of here
+loot travel gridfly goto {x} {z}      # optional: GridFly/HighwayRunner on the same proxy does the trips
+loot travel stop gridfly nav stop
+loot on
+loot start
+loot status
+```
+
+Without a travel command it walks with ZenithProxy's pathfinder (`loot travel elytra <blocks>` flies
+trips over that distance with ZenithProxy's elytra pathing). It ends a target and moves on when a
+player who is not on the friends list comes into range or health drops to 8 (`loot safety ...`).
+
+## Watchdog (cron on each droplet)
+
+A new jar that fails to load cannot be talked back down by the learner, so `deploy/watchdog.py`
+puts the previous jar back (the plugin keeps it as `.jar.bak`) and restarts the proxy through its
+tmux session. Copy the example from the top of the script into `deploy/watchdog.json` and add:
+
+```
+*/10 * * * * /usr/bin/python3 /root/lootbot/deploy/watchdog.py >> /root/lootbot/watchdog.log 2>&1
+```

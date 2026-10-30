@@ -1,0 +1,13 @@
+{
+  "_comment": "The settings the tuner tries. 'default' is where it starts; 'choices' is what a mutation may pick. Names match the plugin's Params class.",
+  "searchRadius":      {"default": 48,  "choices": [24, 32, 48, 64, 96]},
+  "settleTicks":       {"default": 100, "choices": [40, 100, 200, 300]},
+  "arriveRadius":      {"default": 16,  "choices": [6, 12, 16, 32]},
+  "maxContainers":     {"default": 40,  "choices": [10, 20, 40, 80, 150]},
+  "order":             {"default": "shulkersFirst", "choices": ["nearest", "shulkersFirst", "doublesFirst"]},
+  "openTimeoutTicks":  {"default": 300, "choices": [160, 300, 500, 800]},
+  "triesPerContainer": {"default": 2,   "choices": [1, 2, 3]},
+  "breakShulkers":     {"default": true, "choices": [true, false]},
+  "reserveSlots":      {"default": 1,   "choices": [0, 1, 3, 6]},
+  "take":              {"default": "wanted", "choices": ["wanted", "all"]}
+}

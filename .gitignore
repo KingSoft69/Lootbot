@@ -1,0 +1,34 @@
+# Gradle
+.gradle/
+build/
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDEs
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+bin/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Server runtime files
+run/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Learner runtime data
+learner/data/
+data/
+deploy/watchdog.json
+*.log

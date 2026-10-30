@@ -1,0 +1,12 @@
+[Unit]
+Description=LootBot learner
+After=network-online.target
+
+[Service]
+WorkingDirectory=/root/lootbot/learner
+ExecStart=/usr/bin/python3 -m lootlearner --data /root/lootbot/data serve
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

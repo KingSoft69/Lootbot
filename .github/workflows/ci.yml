@@ -1,0 +1,40 @@
+# Every push and pull request: the learner's tests and a build of the plugin. The review loop waits
+# for this to pass on its branch before it merges and tags a release.
+name: CI
+
+on:
+  push:
+    branches-ignore: [reports]
+  pull_request:
+
+jobs:
+  learner:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Learner tests
+        working-directory: learner
+        run: python -m unittest discover -s tests -v
+
+  plugin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # 25 for ZenithProxy (the plugin is compiled against it); 21 (last, so JAVA_HOME) runs Gradle.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: |
+            25
+            21
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build the plugin
+        working-directory: plugin
+        run: ./gradlew build --no-daemon --stacktrace
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugin-jar
+          path: plugin/build/libs/LootBot-*.jar

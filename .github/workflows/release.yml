@@ -1,0 +1,57 @@
+# Push a tag v<plugin_version> and this publishes the release the learner looks for:
+#   LootBot-<version>.jar and LootBot-<version>.jar.sha256
+# The learner downloads it, runs it on the canary bot, and promotes or rolls it back on the numbers.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the tag matches plugin_version
+        id: version
+        run: |
+          v=$(sed -n 's/^plugin_version=//p' plugin/gradle.properties)
+          if [ "v$v" != "${GITHUB_REF_NAME}" ]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match plugin_version $v"
+            exit 1
+          fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Learner tests
+        working-directory: learner
+        run: python -m unittest discover -s tests
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: |
+            25
+            21
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build the plugin
+        working-directory: plugin
+        run: ./gradlew build --no-daemon --stacktrace
+
+      - name: Publish
+        run: |
+          set -e
+          v="${{ steps.version.outputs.version }}"
+          mkdir out
+          cp "plugin/build/libs/LootBot-$v.jar" out/
+          (cd out && sha256sum "LootBot-$v.jar" > "LootBot-$v.jar.sha256")
+          notes=$(awk -v v="$v" '$0 ~ "^## "v"( |$)" {p=1; next} /^## / {p=0} p' CHANGES.md)
+          gh release create "v$v" out/* --title "LootBot $v" --notes "${notes:-LootBot $v}"
