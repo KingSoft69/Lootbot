@@ -1,11 +1,13 @@
-# Push a tag v<plugin_version> and this publishes the release the learner looks for:
-#   LootBot-<version>.jar and LootBot-<version>.jar.sha256
+# Publishes the release the learner looks for whenever main carries a plugin_version that has no
+# release yet (bump plugin_version in plugin/gradle.properties and push to main):
+#   tag v<version>, LootBot-<version>.jar and LootBot-<version>.jar.sha256
 # The learner downloads it, runs it on the canary bot, and promotes or rolls it back on the numbers.
 name: Release
 
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -18,35 +20,43 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check the tag matches plugin_version
+      - name: Read plugin_version and skip when it is released already
         id: version
         run: |
           v=$(sed -n 's/^plugin_version=//p' plugin/gradle.properties)
-          if [ "v$v" != "${GITHUB_REF_NAME}" ]; then
-            echo "::error::Tag ${GITHUB_REF_NAME} does not match plugin_version $v"
-            exit 1
-          fi
           echo "version=$v" >> "$GITHUB_OUTPUT"
+          if gh release view "v$v" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "v$v is released already: nothing to do"
+            echo "new=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "new=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - uses: actions/setup-python@v5
+        if: steps.version.outputs.new == 'true'
         with:
           python-version: "3.11"
       - name: Learner tests
+        if: steps.version.outputs.new == 'true'
         working-directory: learner
         run: python -m unittest discover -s tests
 
       - uses: actions/setup-java@v4
+        if: steps.version.outputs.new == 'true'
         with:
           distribution: temurin
           java-version: |
             25
             21
       - uses: gradle/actions/setup-gradle@v4
+        if: steps.version.outputs.new == 'true'
       - name: Build the plugin
+        if: steps.version.outputs.new == 'true'
         working-directory: plugin
         run: ./gradlew build --no-daemon --stacktrace
 
       - name: Publish
+        if: steps.version.outputs.new == 'true'
         run: |
           set -e
           v="${{ steps.version.outputs.version }}"
@@ -54,4 +64,4 @@ jobs:
           cp "plugin/build/libs/LootBot-$v.jar" out/
           (cd out && sha256sum "LootBot-$v.jar" > "LootBot-$v.jar.sha256")
           notes=$(awk -v v="$v" '$0 ~ "^## "v"( |$)" {p=1; next} /^## / {p=0} p' CHANGES.md)
-          gh release create "v$v" out/* --title "LootBot $v" --notes "${notes:-LootBot $v}"
+          gh release create "v$v" out/* --target "$GITHUB_SHA" --title "LootBot $v" --notes "${notes:-LootBot $v}"

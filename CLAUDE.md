@@ -55,9 +55,10 @@ Runs on a schedule. The learner pushes `reports/latest.md` and `reports/latest.j
 6. Push the branch and wait for CI on it (`gh api repos/{owner}/{repo}/actions/runs?branch=auto/...`,
    poll every minute, up to 30 minutes). If CI fails, fix it on the branch; after two failed fixes,
    abandon the branch and end with a note of why.
-7. When CI passes: fast-forward `main` to the branch, push `main`, and for a plugin change push the
-   tag `v<plugin_version>`. The Release workflow publishes the jar; the learner tries it on the
-   canary bot and promotes it or rolls it back by itself. A learner-only change takes effect when
+7. When CI passes: fast-forward `main` to the branch and push `main`. A new `plugin_version` on main
+   is released by the Release workflow by itself (tag, jar, checksum; tags cannot be pushed from a
+   Claude session, so never try). The learner tries it on the canary bot and promotes it or rolls
+   it back by itself. A learner-only change takes effect when
    the learner is restarted on the droplet, so say so in `CHANGES.md` and the final message.
 8. End with a short final message: the change, the evidence, the release.
 
@@ -67,5 +68,5 @@ Runs on a schedule. The learner pushes `reports/latest.md` and `reports/latest.j
   the rollback, or the watchdog's `.bak` restore.
 - Make the bot attack players, place blocks other than what looting needs, or send anything to
   any address other than the learner.
-- Touch the reports branch by hand, rewrite history on `main`, or change the release tag format.
+- Touch the reports branch by hand, rewrite history on `main`, or change how releases are named.
 - Ship more than one release per run.
