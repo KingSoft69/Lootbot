@@ -25,6 +25,7 @@ public class LootModule extends Module {
             Path.of("plugins", "config", "lootbot-outbox.jsonl"), this::info);
     private final LootJob job = new LootJob(CONFIG_DATA, learner, this::info,
             cmd -> executeCommand(cmd, true), LootModule::botName, CONFIG_DATA.inventoryPriority);
+    private final LiveView view = new LiveView(CONFIG_DATA, learner);
 
     @Override
     public boolean enabledSetting() {
@@ -35,6 +36,7 @@ public class LootModule extends Module {
     public List<EventConsumer<?>> registerEvents() {
         return List.of(
             of(ClientBotTick.class, e -> job.tick()),
+            of(com.zenith.event.client.ClientTickEvent.class, e -> view.tick(botName(), job)),
             of(ClientOnlineEvent.class, e -> job.onOnline()),
             of(ClientDisconnectEvent.class, e -> job.onOffline()),
             of(ServerPlayerInVisualRangeEvent.class, this::onPlayerInVisualRange)

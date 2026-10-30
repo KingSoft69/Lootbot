@@ -225,6 +225,14 @@ class Dashboard:
             "live": (self.learner.deployer.live() or {}).get("version"),
         }
 
+    def view(self):
+        """The freshest live view of any bot, with its age in seconds; {} when there is none."""
+        views = list(self.learner.views.values())
+        if not views:
+            return {}
+        v = max(views, key=lambda x: x.get("receivedAt", 0))
+        return {**v, "age": round(time.time() - v.get("receivedAt", 0), 1)}
+
     def post(self, path, body):
         if path == "/ui/zenith/start":
             return {"msg": self.zenith.start()}

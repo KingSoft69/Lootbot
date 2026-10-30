@@ -2,6 +2,18 @@
 
 Newest first. Each entry: what changed, the evidence for it, and what result would show it worked.
 
+## 0.1.1
+
+Live view for the local dashboard: about once a second the plugin sends a top-down map of the
+blocks around the bot (read from just over its head down, so roofs don't hide the floor), its pose,
+nearby players and what the loot job is doing (target, containers done and to do, loot taken).
+'loot view off' turns it off. No change to how the bot loots.
+
+## Dashboard
+
+The learner can run a local dashboard (`dashboard --zenith <folder>`) that starts and stops
+ZenithProxy, shows its console, has buttons for the setup steps, and lists targets and visits.
+
 ## Learner: targets from the Discord finds
 
 The learner takes targets from the Discord finds bot (the one Revive's Finds module reads) every

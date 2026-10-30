@@ -77,6 +77,7 @@ class Learner:
                            explore=float(tcfg.get("explore", 0.25)), rng=rng)
         self.deployer = Deployer(self.db, self.data_dir / "jars", self.config, log=log)
         self.findsbot = findsbot.Sync(self.db, self.config.setdefault("findsBot", dict(DEFAULT_CONFIG["findsBot"])), log=log)
+        self.views = {}  # bot -> its latest live view (kept in memory only)
         self.gridfly = gridfly.Sync(self.db, self.config.setdefault("gridfly", dict(DEFAULT_CONFIG["gridfly"])), log=log)
 
     # -- bot calls
@@ -210,6 +211,11 @@ def make_handler(learner, dashboard=None):
                     return self._send(200, learner.next(self._body()))
                 if self.path == "/api/episode" and self._auth(cfg["botToken"]):
                     return self._send(200, learner.episode(self._body()))
+                if self.path == "/api/view" and self._auth(cfg["botToken"]):
+                    v = self._body()
+                    v["receivedAt"] = time.time()
+                    learner.views[str(v.get("bot") or "unknown")] = v
+                    return self._send(200, {"ok": True})
                 if self.path == "/api/event" and self._auth(cfg["botToken"]):
                     b = self._body()
                     learner.db.event(b.get("bot"), str(b.get("kind"))[:40], str(b.get("text"))[:500])
@@ -230,6 +236,8 @@ def make_handler(learner, dashboard=None):
                         return self._send(403, {"error": "the dashboard only answers this computer"})
                     if self.path in ("/", "/index.html"):
                         return self._send(200, dashboard.page(), "text/html; charset=utf-8")
+                    if self.path.startswith("/ui/view"):
+                        return self._send(200, dashboard.view())
                     if self.path.startswith("/ui/state"):
                         after = int((self.path.split("after=", 1) + ["0"])[1] or 0) if "after=" in self.path else 0
                         return self._send(200, dashboard.state(after))

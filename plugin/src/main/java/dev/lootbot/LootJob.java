@@ -1209,6 +1209,54 @@ final class LootJob {
         return phase;
     }
 
+    /** What the job is doing, for the dashboard's live view (read on the tick thread). */
+    JsonObject viewInfo() {
+        JsonObject o = new JsonObject();
+        Phase p = phase;
+        o.addProperty("phase", p.name().toLowerCase(Locale.ROOT));
+        if ((p == Phase.LOOT || p == Phase.DEPOSIT) && step != null) {
+            o.addProperty("step", step.name().toLowerCase(Locale.ROOT).replace('_', ' '));
+        }
+        o.addProperty("note", lastNote);
+        LearnerClient.Target t = target;
+        if (t != null && p != Phase.IDLE && p != Phase.OFF && p != Phase.ASKING) {
+            JsonObject to = new JsonObject();
+            to.addProperty("id", t.id);
+            to.addProperty("x", t.x);
+            to.addProperty("z", t.z);
+            to.addProperty("label", t.label);
+            o.add("target", to);
+        }
+        if (travelTo != null && (p == Phase.TRAVEL || p == Phase.HOME)) {
+            JsonObject g = new JsonObject();
+            g.addProperty("x", travelTo[0]);
+            g.addProperty("z", travelTo[1]);
+            o.add("goal", g);
+        }
+        if (p == Phase.LOOT || p == Phase.SETTLE || p == Phase.DEPOSIT) {
+            List<ContainerScan.Spot> list = p == Phase.DEPOSIT ? homeSpots : spots;
+            JsonArray arr = new JsonArray();
+            for (ContainerScan.Spot s : list) {
+                JsonObject c = new JsonObject();
+                c.addProperty("x", s.x());
+                c.addProperty("z", s.z());
+                c.addProperty("kind", s.kind().name().toLowerCase(Locale.ROOT));
+                String state = finished.contains(s.key()) ? "done" : "todo";
+                if (s == spot && (step == Step.OPENING || step == Step.WAIT_OPEN || step == Step.TAKING
+                        || step == Step.BREAKING || step == Step.PICKUP)) {
+                    state = "now";
+                }
+                c.addProperty("state", state);
+                arr.add(c);
+            }
+            o.add("containers", arr);
+        }
+        if (ep != null) {
+            o.addProperty("loot", ep.lootSummary());
+        }
+        return o;
+    }
+
     /** Read from the command thread: only the volatile fields and the inventory cache. */
     String statusLine() {
         Phase p = phase;

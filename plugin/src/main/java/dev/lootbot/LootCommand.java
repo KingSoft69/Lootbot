@@ -48,7 +48,8 @@ public class LootCommand extends Command {
                 "travel elytra <blocks, 0 for never>",
                 "safety health <n>",
                 "safety players on/off",
-                "update on/off"
+                "update on/off",
+                "view on/off"
             )
             .build();
     }
@@ -140,6 +141,10 @@ public class LootCommand extends Command {
                     CONFIG_DATA.safety.abortOnPlayer = getToggle(c, "toggle");
                     c.getSource().getEmbed().title("LootBot Safety").description("abort on players " + toggleStr(CONFIG_DATA.safety.abortOnPlayer));
                 }))))
+            .then(literal("view").then(argument("toggle", toggle()).executes(c -> {
+                CONFIG_DATA.view.enabled = getToggle(c, "toggle");
+                c.getSource().getEmbed().title("LootBot Live View " + toggleStrCaps(CONFIG_DATA.view.enabled));
+            })))
             .then(literal("update").then(argument("toggle", toggle()).executes(c -> {
                 CONFIG_DATA.update.auto = getToggle(c, "toggle");
                 c.getSource().getEmbed().title("LootBot Self-Update " + toggleStrCaps(CONFIG_DATA.update.auto));

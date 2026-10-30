@@ -18,6 +18,7 @@ public class LootConfig {
     public Home home = new Home();
     public Safety safety = new Safety();
     public Update update = new Update();
+    public View view = new View();
     /**
      * The kit: item counts the bot keeps (elytra, rockets, food, pickaxe...). Saved from the inventory
      * with 'loot kit'; everything beyond it is unloaded at home.
@@ -63,6 +64,15 @@ public class LootConfig {
         public int abortHealth = 8;
         /** Someone not on the friends list in render distance ends the target. */
         public boolean abortOnPlayer = true;
+    }
+
+    public static class View {
+        /** Sends the dashboard's live view (a map of the blocks around the bot, its pose, players near). */
+        public boolean enabled = true;
+        /** Blocks each way from the bot. */
+        public int radius = 48;
+        /** Ticks between views (20 is one a second). */
+        public int intervalTicks = 20;
     }
 
     public static class Update {

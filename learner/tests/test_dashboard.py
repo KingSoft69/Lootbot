@@ -46,6 +46,12 @@ class DashboardTest(unittest.TestCase):
         self.assertTrue(self.wait_for("stopped (exit 0)"))
         self.assertFalse(self.dash.zenith.want)
 
+    def test_live_view_keeps_the_freshest(self):
+        self.assertEqual(self.dash.view(), {})
+        self.learner.views["BotA"] = {"bot": "BotA", "x": 1, "receivedAt": 100}
+        self.learner.views["BotB"] = {"bot": "BotB", "x": 2, "receivedAt": 200}
+        self.assertEqual(self.dash.view()["bot"], "BotB")
+
     def test_state_and_target_buttons(self):
         tid = targets.add(self.learner.db, 10, 20, label="High priority - X10 Z20")
         s = self.dash.state()

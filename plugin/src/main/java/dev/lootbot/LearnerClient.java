@@ -115,6 +115,11 @@ final class LearnerClient {
         });
     }
 
+    /** The dashboard's live view. Best effort: a lost one is replaced a second later. */
+    void view(JsonObject view) {
+        post("/api/view", GSON.toJson(view));
+    }
+
     /** A short event the learner keeps in its log (a find, a problem). Best effort, never queued. */
     void event(String bot, String kind, String text) {
         JsonObject o = new JsonObject();

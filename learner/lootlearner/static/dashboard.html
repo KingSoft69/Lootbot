@@ -65,6 +65,17 @@
   .kv span:nth-child(odd) { color: var(--dim); }
   .addrow { display: flex; gap: 6px; margin-top: 10px; }
   .addrow input { padding: 6px 8px; font-size: 13px; }
+  .live { display: grid; grid-template-columns: minmax(0, 1fr) 230px; gap: 14px; }
+  @media (max-width: 1100px) { .live { grid-template-columns: 1fr; } }
+  .mapwrap { position: relative; background: #0b0d0f; border: 1px solid var(--line); border-radius: 8px; aspect-ratio: 1; max-height: 560px; width: 100%; overflow: hidden; }
+  #map { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
+  .mapmsg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; color: var(--dim); padding: 30px; font-size: 13px; }
+  .zoom { display: flex; gap: 4px; }
+  .facts { font-size: 13px; }
+  .facts div { padding: 5px 0; border-bottom: 1px solid #20262b; }
+  .facts span { color: var(--dim); display: block; font-size: 11.5px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 12px; font-size: 11.5px; color: var(--dim); margin-top: 8px; }
+  .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
 </style>
 </head>
 <body>
@@ -126,6 +137,19 @@
       <div class="tile"><div class="v" id="tPts">0</div><div class="k">loot points (24 h)</div></div>
       <div class="tile"><div class="v" id="tOpen">0</div><div class="k">targets waiting</div></div>
       <div class="tile"><div class="v" id="tDeaths">0</div><div class="k">deaths (24 h)</div></div>
+    </div>
+
+    <div class="card">
+      <h2>Live view <span class="zoom"><button class="mini" data-zoom="1">1x</button><button class="mini" data-zoom="1.6">2x</button><button class="mini" data-zoom="2.6">3x</button></span></h2>
+      <div class="live">
+        <div class="mapwrap"><canvas id="map" width="720" height="720"></canvas><div class="mapmsg" id="mapMsg">No live view yet. It appears once the bot is in game with LootBot loaded.</div></div>
+        <div class="facts" id="facts"></div>
+      </div>
+      <div class="legend">
+        <span><i style="background:#fff"></i>bot</span><span><i style="background:#ff5a4f"></i>player</span>
+        <span><i style="background:#e8b04b"></i>container to do</span><span><i style="background:#6aa8e8"></i>opening now</span>
+        <span><i style="background:#5fd38d"></i>done</span><span><i style="background:#c77dff"></i>target / goal</span><span><i style="background:#9ad1ff"></i>home</span>
+      </div>
     </div>
 
     <div class="card">
@@ -288,6 +312,132 @@ async function refresh() {
   }
 }
 refresh(); setInterval(refresh, 2000);
+
+// ---------------------------------------------------------------- live view
+const MAP_RGB = [0x000000,0x7FB238,0xF7E9A3,0xC7C7C7,0xFF0000,0xA0A0FF,0xA7A7A7,0x007C00,0xFFFFFF,0xA4A8B8,0x976D4D,0x707070,
+  0x4040FF,0x8F7748,0xFFFCF5,0xD87F33,0xB24CD8,0x6699D8,0xE5E533,0x7FCC19,0xF27FA5,0x4C4C4C,0x999999,0x4C7F99,0x7F3FB2,0x334CB2,
+  0x664C33,0x667F33,0x993333,0x191919,0xFAEE4D,0x5CDBD5,0x4A80FF,0x00D93A,0x815631,0x700200,0xD1B1A1,0x9F5224,0x95576C,0x706C8A,
+  0xBA8524,0x677535,0xA04D4E,0x392923,0x876B62,0x575C5C,0x7A4958,0x4C3E5C,0x4C3223,0x4C522A,0x8E3C2E,0x251610,0xBD3031,0x943F61,
+  0x5C191D,0x167E86,0x3A8E8C,0x562C3E,0x14B485,0x646464,0xD8AF93,0x7FA796];
+let zoom = 1, lastView = null, terrain = null, terrainKey = "";
+document.querySelectorAll("[data-zoom]").forEach(b => b.addEventListener("click", () => { zoom = +b.dataset.zoom; drawView(); }));
+function b64(s) { const bin = atob(s); const a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return a; }
+function buildTerrain(g) {
+  const n = g.size, col = b64(g.colours), hRaw = b64(g.heights);
+  const h = new Int8Array(hRaw.buffer);
+  const c = document.createElement("canvas"); c.width = c.height = n;
+  const ctx = c.getContext("2d"), img = ctx.createImageData(n, n);
+  for (let i = 0; i < n * n; i++) {
+    const id = col[i], o = i * 4;
+    if (!id) { img.data[o] = 14; img.data[o+1] = 17; img.data[o+2] = 20; img.data[o+3] = 255; continue; }
+    let rgb = MAP_RGB[id] ?? 0x808080;
+    // Shade like a map: lighter where the column is higher than the one north of it, darker where lower.
+    const north = i >= n && col[i - n] ? h[i - n] : h[i];
+    let f = h[i] > north ? 1.08 : h[i] < north ? 0.78 : 0.92;
+    f *= 0.85 + Math.max(-0.25, Math.min(0.25, h[i] / 40));
+    img.data[o] = Math.min(255, ((rgb >> 16) & 255) * f); img.data[o+1] = Math.min(255, ((rgb >> 8) & 255) * f);
+    img.data[o+2] = Math.min(255, (rgb & 255) * f); img.data[o+3] = 255;
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+function tag(ctx, text, x, y, colr) {
+  const w = ctx.measureText(text).width + 8;
+  ctx.fillStyle = "rgba(10,12,14,.78)"; ctx.fillRect(x - 4, y - 12, w, 16);
+  ctx.fillStyle = colr; ctx.fillText(text, x, y);
+}
+function drawView() {
+  const v = lastView, cv = $("map"), ctx = cv.getContext("2d");
+  if (!v || !v.grid) { $("mapMsg").style.display = "flex"; ctx.clearRect(0, 0, cv.width, cv.height); return; }
+  $("mapMsg").style.display = "none";
+  const g = v.grid, key = g.x0 + ":" + g.z0 + ":" + g.colours.length + ":" + g.colours.slice(0, 64) + g.heights.slice(-64);
+  if (key !== terrainKey) { terrain = buildTerrain(g); terrainKey = key; }
+  const W = cv.width, n = g.size, view = n / zoom, scale = W / view;
+  // World coords at the canvas centre: the bot.
+  const cx = v.x, cz = v.z;
+  const sx = wx => (wx - cx) * scale + W / 2, sz = wz => (wz - cz) * scale + W / 2;
+  ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = "#0e1114"; ctx.fillRect(0, 0, W, W);
+  ctx.drawImage(terrain, sx(g.x0), sz(g.z0), n * scale, n * scale);
+  const job = v.job || {};
+  // Containers
+  for (const c of job.containers || []) {
+    const colr = c.state === "done" ? "#5fd38d" : c.state === "now" ? "#6aa8e8" : "#e8b04b";
+    ctx.strokeStyle = colr; ctx.lineWidth = c.state === "now" ? 3 : 2;
+    const s = Math.max(6, scale);
+    ctx.strokeRect(sx(c.x) - (c.state === "now" ? 2 : 0), sz(c.z) - (c.state === "now" ? 2 : 0), s + (c.state === "now" ? 4 : 0), s + (c.state === "now" ? 4 : 0));
+  }
+  // Markers: target/goal and home, on the map or as an arrow at the edge.
+  const marks = [];
+  if (job.goal) marks.push([job.goal.x + .5, job.goal.z + .5, "#c77dff", job.target && job.goal.x === job.target.x ? "target" : "goal"]);
+  else if (job.target) marks.push([job.target.x + .5, job.target.z + .5, "#c77dff", "target"]);
+  if (v.home) marks.push([v.home.x + .5, v.home.z + .5, "#9ad1ff", "home"]);
+  ctx.font = "12px system-ui, sans-serif";
+  for (const [mx, mz, colr, label] of marks) {
+    let px = sx(mx), pz = sz(mz);
+    const inside = px > 10 && px < W - 10 && pz > 10 && pz < W - 10;
+    ctx.fillStyle = colr; ctx.strokeStyle = colr;
+    if (inside) {
+      ctx.beginPath(); ctx.arc(px, pz, 7, 0, Math.PI * 2); ctx.lineWidth = 2.5; ctx.stroke();
+      tag(ctx, label, px + 11, pz + 4, colr);
+    } else {
+      const a = Math.atan2(pz - W / 2, px - W / 2), r = W / 2 - 22;
+      const ex = W / 2 + Math.cos(a) * r, ez = W / 2 + Math.sin(a) * r;
+      ctx.save(); ctx.translate(ex, ez); ctx.rotate(a);
+      ctx.beginPath(); ctx.moveTo(12, 0); ctx.lineTo(-6, -8); ctx.lineTo(-6, 8); ctx.closePath(); ctx.fill(); ctx.restore();
+      const d = Math.round(Math.hypot(mx - v.x, mz - v.z));
+      const tx = Math.min(W - 110, Math.max(6, ex - 40)), tz = Math.min(W - 8, Math.max(16, ez + (ez < W / 2 ? 24 : -14)));
+      tag(ctx, `${label} ${d.toLocaleString()} m`, tx, tz, colr);
+    }
+  }
+  // Players
+  for (const p of v.players || []) {
+    const px = sx(p.x), pz = sz(p.z);
+    ctx.fillStyle = "#ff5a4f"; ctx.beginPath(); ctx.arc(px, pz, 6, 0, Math.PI * 2); ctx.fill();
+    tag(ctx, p.name, px + 10, pz - 6, "#ff8b80");
+  }
+  // The bot: an arrow along its yaw (0 = south, +Z; 90 = west, -X).
+  const yaw = (v.yaw || 0) * Math.PI / 180, dx = -Math.sin(yaw), dz = Math.cos(yaw);
+  ctx.beginPath(); ctx.arc(W / 2, W / 2, 15, 0, Math.PI * 2);
+  ctx.fillStyle = "rgba(255,255,255,.18)"; ctx.fill(); ctx.strokeStyle = "rgba(255,255,255,.7)"; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.save(); ctx.translate(W / 2, W / 2); ctx.rotate(Math.atan2(dz, dx));
+  ctx.fillStyle = "#fff"; ctx.strokeStyle = "#000"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(13, 0); ctx.lineTo(-8, -8); ctx.lineTo(-4, 0); ctx.lineTo(-8, 8); ctx.closePath(); ctx.stroke(); ctx.fill();
+  ctx.restore();
+  // Scale bar
+  const bar = Math.round(scale * 10);
+  ctx.fillStyle = "rgba(10,12,14,.78)"; ctx.fillRect(8, W - 28, bar + 84, 20);
+  ctx.fillStyle = "#e3e7ea"; ctx.fillRect(14, W - 19, bar, 3); ctx.fillText("10 blocks", 22 + bar, W - 13);
+}
+function renderFacts(v) {
+  if (!v || !v.bot) { $("facts").innerHTML = '<div class="muted">Waiting for the bot.</div>'; return; }
+  const job = v.job || {};
+  const fresh = v.age < 5;
+  const rows = [
+    ["Bot", `${esc(v.bot)} <span style="display:inline;color:${fresh ? "var(--accent)" : "var(--warn)"}">${fresh ? "● live" : v.age + " s old"}</span>`],
+    ["Doing", esc(job.phase || "–") + (job.step ? " · " + esc(job.step) : "")],
+    ["Position", `${Math.round(v.x).toLocaleString()}, ${Math.round(v.y)}, ${Math.round(v.z).toLocaleString()} <span style="display:inline">${esc(v.dim)}</span>`],
+    ["Health · free slots", `${Math.round(v.health)} hp · ${v.freeSlots}`],
+  ];
+  if (job.target) rows.push(["Target", `#${job.target.id} ${esc(job.target.label || "")}<br>${job.target.x.toLocaleString()}, ${job.target.z.toLocaleString()} · ${Math.round(Math.hypot(job.target.x - v.x, job.target.z - v.z)).toLocaleString()} m`]);
+  if (job.containers) {
+    const done = job.containers.filter(c => c.state === "done").length;
+    rows.push(["Containers", `${done} of ${job.containers.length} done`]);
+  }
+  if (job.loot) rows.push(["Taken this visit", esc(job.loot)]);
+  if ((v.players || []).length) rows.push(["Players near", v.players.map(p => esc(p.name)).join(", ")]);
+  if (job.note) rows.push(["Last", esc(job.note)]);
+  $("facts").innerHTML = rows.map(([k, val]) => `<div><span>${k}</span>${val}</div>`).join("");
+}
+async function refreshView() {
+  try {
+    const r = await fetch("/ui/view");
+    const v = await r.json();
+    lastView = v && v.bot ? v : null;
+    drawView(); renderFacts(lastView);
+  } catch (e) { }
+}
+refreshView(); setInterval(refreshView, 1000);
 </script>
 </body>
 </html>
