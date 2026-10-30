@@ -38,11 +38,11 @@ final class ContainerScan {
     private ContainerScan() {}
 
     /**
-     * Containers within {@code radius} (XZ) of the centre, one entry per double chest, ordered for
+     * Containers within {@code radius} (XZ) of the centre (trapped chests only when asked), ordered for
      * looting: {@code nearest} by distance from the bot, {@code shulkersFirst} placed shulker boxes
      * then the rest by distance, {@code doublesFirst} double chests then the rest by distance.
      */
-    static List<Spot> scan(int cx, int cz, int radius, String order, double px, double py, double pz) {
+    static List<Spot> scan(int cx, int cz, int radius, String order, boolean includeTrapped, double px, double py, double pz) {
         List<Chunk> chunks;
         try {
             chunks = new ArrayList<>(CACHE.getChunkCache().getCache().values());
@@ -62,7 +62,7 @@ final class ContainerScan {
             }
             for (BlockEntityInfo be : entities) {
                 Kind kind = kindOf(be.getType());
-                if (kind == null) {
+                if (kind == null || (kind == Kind.TRAPPED_CHEST && !includeTrapped)) {
                     continue;
                 }
                 int x = baseX + be.getX(), y = be.getY(), z = baseZ + be.getZ();
@@ -73,25 +73,19 @@ final class ContainerScan {
                 raw.add(new Spot(x, y, z, kind, false));
             }
         }
-        // Double chests: two chests of the same kind side by side are one inventory, opened once.
+        // A chest with a chest of the same kind beside it may be half of a double chest (only the
+        // ordering uses this; both are kept, and opening one as 54 slots marks the other done).
         Set<String> all = new HashSet<>();
         for (Spot s : raw) {
             all.add(s.kind() + ":" + s.key());
         }
-        Set<String> skip = new HashSet<>();
         List<Spot> out = new ArrayList<>();
         for (Spot s : raw) {
-            String k = s.kind() + ":" + s.key();
-            if (skip.contains(k)) {
-                continue;
-            }
             boolean pair = false;
             if (s.kind() == Kind.CHEST || s.kind() == Kind.TRAPPED_CHEST) {
                 int[][] n = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
                 for (int[] d : n) {
-                    String nk = s.kind() + ":" + (s.x() + d[0]) + "," + s.y() + "," + (s.z() + d[1]);
-                    if (all.contains(nk) && !skip.contains(nk)) {
-                        skip.add(nk);
+                    if (all.contains(s.kind() + ":" + (s.x() + d[0]) + "," + s.y() + "," + (s.z() + d[1]))) {
                         pair = true;
                         break;
                     }

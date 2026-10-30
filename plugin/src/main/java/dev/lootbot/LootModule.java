@@ -45,7 +45,7 @@ public class LootModule extends Module {
     public void onEnable() {
         if (CONFIG_DATA.active) {
             info("LootBot: job was running before the restart; carrying on");
-            job.start();
+            job.requestStart();
         }
     }
 
@@ -53,7 +53,7 @@ public class LootModule extends Module {
     public void onDisable() {
         if (job.phase() != LootJob.Phase.OFF) {
             boolean keep = CONFIG_DATA.active;
-            job.stop();
+            job.requestStop();
             CONFIG_DATA.active = keep; // a module toggle is not the job being stopped
         }
     }

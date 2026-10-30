@@ -69,10 +69,10 @@ public class LootCommand extends Command {
                         c.getSource().getEmbed().title("LootBot Learner Set").description(CONFIG_DATA.learner.url);
                     }))))
             .then(literal("start").executes(c -> {
-                c.getSource().getEmbed().title("LootBot").description(job().start());
+                c.getSource().getEmbed().title("LootBot").description(job().requestStart());
             }))
             .then(literal("stop").executes(c -> {
-                c.getSource().getEmbed().title("LootBot").description(job().stop());
+                c.getSource().getEmbed().title("LootBot").description(job().requestStop());
             }))
             .then(literal("status").executes(c -> {
                 c.getSource().getEmbed().title("LootBot Status").description(job().statusLine()

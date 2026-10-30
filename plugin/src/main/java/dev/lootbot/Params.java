@@ -24,7 +24,9 @@ public class Params {
     public int openTimeoutTicks = 300;
     /** Tries per container before it is skipped. */
     public int triesPerContainer = 2;
-    /** Placed shulker boxes are broken and picked up whole (needs a pickaxe). */
+    /** Trapped chests are opened too. Off: at stashes they are often wired to TNT. */
+    public boolean lootTrapped = false;
+    /** Placed shulker boxes are broken and picked up whole. */
     public boolean breakShulkers = true;
     /** Stop looting and go home when this few inventory slots are free. */
     public int reserveSlots = 1;

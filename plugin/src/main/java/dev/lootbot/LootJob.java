@@ -10,6 +10,8 @@ import com.zenith.feature.inventory.actions.ShiftClick;
 import com.zenith.feature.pathfinder.PathingRequestFuture;
 import com.zenith.feature.player.World;
 import com.zenith.mc.dimension.DimensionData;
+import com.zenith.mc.item.ItemData;
+import com.zenith.mc.item.ItemRegistry;
 import com.zenith.util.RequestFuture;
 import org.geysermc.mcprotocollib.protocol.data.game.inventory.ShiftClickItemAction;
 import org.geysermc.mcprotocollib.protocol.data.game.item.ItemStack;
@@ -23,20 +25,25 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import static com.zenith.Globals.BARITONE;
+import static com.zenith.Globals.BOT;
 import static com.zenith.Globals.CACHE;
 import static com.zenith.Globals.INVENTORY;
+import static com.zenith.Globals.PLAYER_LISTS;
 
 /**
  * The loot job: asks the learner for a known base, travels there, finds the containers in the
  * loaded chunks, opens each one and takes what is worth taking, breaks and picks up placed shulker
  * boxes, and goes home to unload when the inventory fills. Every target visit is an episode sent
- * back to the learner with the settings used, the time spent and what was taken. Runs on the bot
- * tick (only while no player is connected to the proxy).
+ * back to the learner with the settings used, the time spent and what was taken.
+ *
+ * Everything here runs on the bot tick (the client event loop), only while no player is connected
+ * to the proxy. Commands from other threads only leave requests that the tick picks up.
  */
 final class LootJob {
 
@@ -45,9 +52,24 @@ final class LootJob {
     private enum Step { PICK, OPENING, WAIT_OPEN, TAKING, CLOSING, BREAKING, PICKUP }
 
     /** Ticks a container may take to show up after the click. */
-    private static final int OPEN_WAIT = 60;
-    private static final int TAKE_WAIT = 80;
-    private static final int PICKUP_WAIT = 160;
+    private static final int OPEN_WAIT = 80;
+    /** ZenithProxy sends one inventory action every few ticks (actionDelayTicks, 5 by default). */
+    private static final int TICKS_PER_ACTION = 6;
+    private static final int CLOSE_WAIT = 100;
+    private static final int PICKUP_WAIT = 200;
+    /** Picking up a broken shulker box never takes the bot further than this from it. */
+    private static final double PICKUP_RANGE = 12;
+    /** Health over the abort line needed before new work is taken. */
+    private static final int HEAL_MARGIN = 6;
+
+    private static final ItemData[] SHULKER_BOXES = {
+        ItemRegistry.SHULKER_BOX, ItemRegistry.WHITE_SHULKER_BOX, ItemRegistry.ORANGE_SHULKER_BOX,
+        ItemRegistry.MAGENTA_SHULKER_BOX, ItemRegistry.LIGHT_BLUE_SHULKER_BOX, ItemRegistry.YELLOW_SHULKER_BOX,
+        ItemRegistry.LIME_SHULKER_BOX, ItemRegistry.PINK_SHULKER_BOX, ItemRegistry.GRAY_SHULKER_BOX,
+        ItemRegistry.LIGHT_GRAY_SHULKER_BOX, ItemRegistry.CYAN_SHULKER_BOX, ItemRegistry.PURPLE_SHULKER_BOX,
+        ItemRegistry.BLUE_SHULKER_BOX, ItemRegistry.BROWN_SHULKER_BOX, ItemRegistry.GREEN_SHULKER_BOX,
+        ItemRegistry.RED_SHULKER_BOX, ItemRegistry.BLACK_SHULKER_BOX,
+    };
 
     private final LootConfig config;
     private final LearnerClient learner;
@@ -56,10 +78,14 @@ final class LootJob {
     private final Supplier<String> botName;
     private final int inventoryPriority;
 
-    private Phase phase = Phase.OFF;
+    // Requests from commands (other threads), handled on the next tick.
+    private volatile boolean startRequested;
+    private volatile boolean stopRequested;
+
+    private volatile Phase phase = Phase.OFF;
     private int phaseTicks;
     private long nextAskAt;
-    private String lastNote = "";
+    private volatile String lastNote = "";
 
     // The work in hand.
     private LearnerClient.Target target;
@@ -67,6 +93,7 @@ final class LootJob {
     private String paramsId = "";
     private CompletableFuture<LearnerClient.Work> asking;
     private CompletableFuture<Boolean> downloading;
+    private String updatingTo;
     private String skipVersion;
     private long skipVersionUntil;
 
@@ -75,11 +102,12 @@ final class LootJob {
     private int travelArrive;
     private int travelLimitTicks;
     private boolean travelByCommand;
+    private boolean travelByElytra;
     private int travelRestarts;
     private double bestDist;
     private int bestDistTick;
 
-    // Looting.
+    // Looting and unloading.
     private List<ContainerScan.Spot> spots = new ArrayList<>();
     private int spotIndex;
     private ContainerScan.Spot spot;
@@ -88,20 +116,22 @@ final class LootJob {
     private PathingRequestFuture pathing;
     private RequestFuture invRequest;
     private List<InventoryAction> invActions;
+    private int invWait;
     private final Map<String, Integer> tries = new HashMap<>();
     private final Set<String> finished = new HashSet<>();
     private int shulkersBefore;
 
-    // Depositing.
+    // Home.
     private List<ContainerScan.Spot> homeSpots = new ArrayList<>();
     private int homeIndex;
     private int deposited;
-    /** The home containers were full: no trip home before this time. */
-    private long homeFullUntil;
+    /** No trip home before this time (the home containers were full, or the trip failed). */
+    private long homeBlockedUntil;
 
     // The episode.
     private Episode ep;
     private volatile String abortReason;
+    private boolean kitWarned;
 
     LootJob(LootConfig config, LearnerClient learner, Consumer<String> log, Consumer<String> command,
             Supplier<String> botName, int inventoryPriority) {
@@ -113,55 +143,43 @@ final class LootJob {
         this.inventoryPriority = inventoryPriority;
     }
 
-    // ------------------------------------------------------------------ control
+    // ------------------------------------------------------------------ control (any thread)
 
-    String start() {
+    String requestStart() {
         if (!learner.configured()) {
             return "No learner set: 'loot learner <url> <token>' first";
         }
+        if (config.kit.isEmpty()) {
+            return "No kit saved: put the bot's gear in its inventory and run 'loot kit' first,"
+                    + " so it knows what is gear and what is loot";
+        }
         config.active = true;
-        if (phase == Phase.OFF) {
-            to(Phase.IDLE);
-            nextAskAt = 0;
-        }
-        return "Loot job started: asking the learner for a target";
+        startRequested = true;
+        return "Loot job starting: it asks the learner for a target on its next tick";
     }
 
-    String stop() {
-        boolean was = phase != Phase.OFF;
+    String requestStop() {
+        boolean was = phase != Phase.OFF || config.active;
         config.active = false;
-        if (ep != null) {
-            finishEpisode("stopped", false);
-        }
-        stopMoving();
-        closeContainer();
-        to(Phase.OFF);
-        return was ? "Loot job stopped" : "The loot job was not running";
+        stopRequested = true;
+        return was ? "Loot job stopping" : "The loot job was not running";
     }
 
-    /** Back in game after a login or a respawn: a running job asks for work again. */
+    /** Back in game after a login: a running job asks for work again. */
     void onOnline() {
         if (config.active) {
-            if (ep != null) {
-                finishEpisode("disconnected", false);
-            }
-            to(Phase.IDLE);
-            nextAskAt = System.currentTimeMillis() + 5_000;
+            startRequested = true;
         }
     }
 
+    /** Disconnected (network thread): the tick is not running, so this only leaves a request. */
     void onOffline() {
-        if (ep != null) {
-            finishEpisode("disconnected", false);
-        }
-        if (phase != Phase.OFF) {
-            to(config.active ? Phase.IDLE : Phase.OFF);
-        }
+        abortReason = "disconnected";
     }
 
     /** Someone not on the friends list came into render distance (network thread). */
     void onStranger(String name) {
-        if (config.safety.abortOnPlayer && (phase == Phase.SETTLE || phase == Phase.LOOT)) {
+        if (config.safety.abortOnPlayer && (phase == Phase.TRAVEL || phase == Phase.SETTLE || phase == Phase.LOOT)) {
             abortReason = "player " + name + " nearby";
         }
     }
@@ -173,6 +191,29 @@ final class LootJob {
     // ------------------------------------------------------------------ the tick
 
     void tick() {
+        if (stopRequested) {
+            stopRequested = false;
+            startRequested = false;
+            if (ep != null) {
+                finishEpisode("stopped", false);
+            }
+            stopMoving();
+            closeContainer();
+            to(Phase.OFF);
+            note("stopped");
+        }
+        if (startRequested) {
+            startRequested = false;
+            if (ep != null) {
+                finishEpisode("disconnected", false); // left over from before a relog
+            }
+            if (config.active) {
+                stopMoving();
+                to(Phase.IDLE);
+                nextAskAt = System.currentTimeMillis() + 3_000;
+            }
+            abortReason = null;
+        }
         if (phase == Phase.OFF) {
             return;
         }
@@ -181,13 +222,7 @@ final class LootJob {
             ep.ticks++;
         }
         if (health() <= 0) {
-            if (ep != null) {
-                ep.deaths++;
-                finishEpisode("died", false);
-                stopMoving();
-                to(Phase.IDLE);
-                nextAskAt = System.currentTimeMillis() + 15_000;
-            }
+            onDeath();
             return;
         }
         switch (phase) {
@@ -203,34 +238,82 @@ final class LootJob {
         }
     }
 
+    private void onDeath() {
+        if (phase == Phase.IDLE && ep == null) {
+            return; // already handled: waiting for the respawn
+        }
+        if (ep != null) {
+            ep.deaths++;
+            finishEpisode("died", false);
+        } else {
+            learner.event(botName.get(), "died", "died while " + phase.name().toLowerCase(Locale.ROOT)
+                    + " at " + (int) px() + ", " + (int) pz());
+        }
+        stopMoving();
+        note("died; waiting for the respawn");
+        to(Phase.IDLE);
+        nextAskAt = System.currentTimeMillis() + 15_000;
+    }
+
     // ------------------------------------------------------------------ asking
 
     private void tickIdle() {
         if (!config.active || System.currentTimeMillis() < nextAskAt) {
             return;
         }
+        abortReason = null;
+        if (health() < config.safety.abortHealth + HEAL_MARGIN) {
+            note("healing before the next target (health " + (int) health() + ")");
+            idleFor(30);
+            return;
+        }
+        String missing = missingKit();
+        if (missing != null) {
+            if (!kitWarned) {
+                kitWarned = true;
+                learner.event(botName.get(), "kit_missing", "no " + missing + " in the inventory: not taking targets");
+            }
+            note("kit incomplete (no " + missing + "): waiting; refill it or save a new kit with 'loot kit'");
+            idleFor(300);
+            return;
+        }
+        kitWarned = false;
         if (Items.freeSlots() <= Math.max(2, params.reserveSlots + 1)) {
             // No room for loot: unload first, or wait when there is nowhere to unload.
-            if (config.home.set && !depositSlots().isEmpty() && System.currentTimeMillis() >= homeFullUntil) {
+            if (config.home.set && !depositSlots().isEmpty() && System.currentTimeMillis() >= homeBlockedUntil) {
                 note("inventory full: going home to unload");
-                startTravel(config.home.x, config.home.z, 4);
-                to(Phase.HOME);
+                goHome();
             } else {
-                note(config.home.set ? "inventory full and the home containers are full: waiting"
-                        : "inventory full and no home set ('loot home'): waiting");
+                note(config.home.set ? "inventory full and home is unavailable for now: waiting"
+                        : "inventory full and no home set ('loot home here'): waiting");
                 idleFor(300);
             }
             return;
         }
-        JsonObject state = state();
-        asking = learner.next(botName.get(), BuildConstants.VERSION, state);
+        asking = learner.next(botName.get(), BuildConstants.VERSION, state());
         to(Phase.ASKING);
     }
 
+    /** The first kit item with none left in the inventory, or null when the kit is all there. */
+    private String missingKit() {
+        Map<String, Integer> have = Items.counts();
+        for (String item : config.kit.keySet()) {
+            if (have.getOrDefault(item, 0) <= 0) {
+                return item;
+            }
+        }
+        return null;
+    }
+
     private void tickAsking() {
+        if (asking == null) {
+            idleFor(5);
+            return;
+        }
         if (!asking.isDone()) {
             if (phaseTicks > 20 * 60) {
                 note("the learner did not answer in a minute");
+                asking = null;
                 idleFor(config.learner.pollSeconds);
             }
             return;
@@ -242,14 +325,14 @@ final class LootJob {
             return;
         }
         if (wantsUpdate(w)) {
-            Path dir = ownJar() == null ? null : ownJar().getParent();
-            if (dir == null) {
+            Path own = ownJar();
+            if (own == null) {
                 note("the learner wants version " + w.version + " but this jar's location is unknown: carrying on");
                 skipVersion(w.version);
             } else {
                 note("updating to " + w.version);
-                downloading = learner.download(w.jar, dir.resolve("LootBot-" + w.version + ".jar"));
-                skipVersion = w.version; // remembered for the restart check below
+                updatingTo = w.version;
+                downloading = learner.download(w.jar, own.getParent().resolve("LootBot-" + w.version + ".jar"));
                 to(Phase.UPDATING);
                 return;
             }
@@ -267,7 +350,6 @@ final class LootJob {
         finished.clear();
         if (!dimensionName().equals(target.dim == null ? "overworld" : target.dim)) {
             finishEpisode("wrong_dimension", false);
-            idleFor(5);
             return;
         }
         note("target " + target.id + " at " + target.x + ", " + target.z + (target.label == null ? "" : " (" + target.label + ")"));
@@ -288,10 +370,15 @@ final class LootJob {
     }
 
     private void tickUpdating() {
+        if (downloading == null) {
+            idleFor(5);
+            return;
+        }
         if (!downloading.isDone()) {
             if (phaseTicks > 20 * 60 * 6) {
                 note("the jar download took too long");
-                skipVersion(skipVersion);
+                downloading = null;
+                skipVersion(updatingTo);
                 idleFor(5);
             }
             return;
@@ -300,16 +387,16 @@ final class LootJob {
         downloading = null;
         Path own = ownJar();
         if (!ok || own == null) {
-            note("update to " + skipVersion + " failed; staying on " + BuildConstants.VERSION + " for now");
-            skipVersion(skipVersion);
+            note("update to " + updatingTo + " failed; staying on " + BuildConstants.VERSION + " for now");
+            skipVersion(updatingTo);
             idleFor(5);
             return;
         }
-        Path fresh = own.getParent().resolve("LootBot-" + skipVersion + ".jar");
+        Path fresh = own.getParent().resolve("LootBot-" + updatingTo + ".jar");
         if (!fresh.equals(own)) {
             try {
                 // The old jar is kept as a .bak (ZenithProxy loads only .jar files): the watchdog
-                // (deploy/watchdog.py) puts it back if the new version never reports in.
+                // (deploy/watchdog.py) puts it back if the new version is bad or never reports in.
                 try (var old = Files.newDirectoryStream(own.getParent(), "LootBot-*.jar.bak")) {
                     for (Path p : old) {
                         Files.deleteIfExists(p);
@@ -317,19 +404,20 @@ final class LootJob {
                 }
                 Files.move(own, own.resolveSibling(own.getFileName() + ".bak"), java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             } catch (Exception e) {
-                note("could not remove the old jar (" + e.getMessage() + "): update cancelled");
+                note("could not set the old jar aside (" + e.getMessage() + "): update cancelled");
                 try {
                     Files.deleteIfExists(fresh);
                 } catch (Exception ignored) {
-                    // left for the next try to replace
+                    // the next try replaces it
                 }
-                skipVersion(skipVersion);
+                skipVersion(updatingTo);
                 idleFor(5);
                 return;
             }
         }
-        note("jar " + skipVersion + " installed: restarting the proxy");
-        command.accept("update");
+        note("jar " + updatingTo + " installed: restarting the proxy");
+        // The restart waits for the proxy to shut down: never on the tick thread.
+        CompletableFuture.runAsync(() -> command.accept("update"));
         to(Phase.IDLE);
         nextAskAt = System.currentTimeMillis() + 120_000;
     }
@@ -358,6 +446,7 @@ final class LootJob {
         travelRestarts = 0;
         bestDist = d;
         bestDistTick = 0;
+        travelByElytra = false;
         String cmd = config.travel.command;
         travelByCommand = cmd != null && !cmd.isBlank() && d > arrive;
         if (d <= arrive) {
@@ -371,16 +460,39 @@ final class LootJob {
     }
 
     private void pathTowards(int x, int z, double d) {
-        if (config.travel.elytraOver > 0 && d > config.travel.elytraOver && dimensionName().equals("overworld")) {
-            pathing = BARITONE.elytraTo(x, z);
-        } else {
-            pathing = BARITONE.pathTo(x, z);
+        travelByElytra = config.travel.elytraOver > 0 && d > config.travel.elytraOver && dimensionName().equals("overworld");
+        try {
+            pathing = travelByElytra ? BARITONE.elytraTo(x, z) : BARITONE.pathTo(x, z);
+        } catch (RuntimeException e) {
+            // Elytra pathing refuses some starts (out of bounds, not ready): walk instead.
+            travelByElytra = false;
+            try {
+                pathing = BARITONE.pathTo(x, z);
+            } catch (RuntimeException e2) {
+                pathing = null;
+                note("the pathfinder refused the trip: " + e2.getMessage());
+            }
         }
+    }
+
+    private static boolean landed() {
+        return BOT.isOnGround() && !BOT.isFallFlying();
     }
 
     /** 1 arrived, 0 travelling, -1 failed. */
     private int travelState() {
         double d = distXZ(travelTo[0], travelTo[1]);
+        if (d < bestDist - 32) {
+            bestDist = d;
+            bestDistTick = phaseTicks;
+        }
+        if (phaseTicks > travelLimitTicks || phaseTicks - bestDistTick > 20 * 60 * 5) {
+            return -1; // out of time, or no ground gained for five minutes
+        }
+        // Never "arrived" in the air: a flight lands by itself, and cutting it off mid-glide drops the bot.
+        if (!landed()) {
+            return 0;
+        }
         if (d <= travelArrive) {
             if (travelByCommand) {
                 String stop = config.travel.stopCommand;
@@ -392,41 +504,24 @@ final class LootJob {
             }
             return 1;
         }
-        if (d < bestDist - 32) {
-            bestDist = d;
-            bestDistTick = phaseTicks;
-        }
-        if (phaseTicks > travelLimitTicks) {
-            return -1;
-        }
-        // No ground gained for five minutes: stuck (the travel command's own watchdogs had their chance).
-        if (phaseTicks - bestDistTick > 20 * 60 * 5) {
-            return -1;
-        }
         if (!travelByCommand && phaseTicks > 40 && !BARITONE.isActive()) {
+            // The flight landed short, or the walk gave up: walk the rest.
             if (++travelRestarts > 4) {
                 return -1;
             }
-            pathTowards(travelTo[0], travelTo[1], d);
+            boolean wasElytra = travelByElytra;
+            if (wasElytra) {
+                travelByElytra = false;
+                try {
+                    pathing = BARITONE.pathTo(travelTo[0], travelTo[1]);
+                } catch (RuntimeException e) {
+                    return -1;
+                }
+            } else {
+                pathTowards(travelTo[0], travelTo[1], d);
+            }
         }
         return 0;
-    }
-
-    private void tickTravel() {
-        int s = travelState();
-        if (s == 0) {
-            return;
-        }
-        ep.travelTicks = ep.ticks;
-        if (s < 0) {
-            stopTravel();
-            finishEpisode("travel_failed", false);
-            idleFor(5);
-            return;
-        }
-        note("arrived at target " + target.id + "; waiting for chunks");
-        abortReason = null;
-        to(Phase.SETTLE);
     }
 
     private void stopTravel() {
@@ -439,6 +534,33 @@ final class LootJob {
         stopMoving();
     }
 
+    private void tickTravel() {
+        if ("disconnected".equals(abortReason)) {
+            abortReason = null;
+            stopTravel();
+            finishEpisode("disconnected", false);
+            return;
+        }
+        if (health() <= config.safety.abortHealth) {
+            stopTravel();
+            ep.notes.add("aborted: health " + (int) health() + " on the way");
+            finishEpisode("aborted_health", false);
+            return;
+        }
+        int s = travelState();
+        if (s == 0) {
+            return;
+        }
+        ep.travelTicks = ep.ticks;
+        if (s < 0) {
+            stopTravel();
+            finishEpisode("travel_failed", false);
+            return;
+        }
+        note("arrived at target " + target.id + "; waiting for chunks");
+        to(Phase.SETTLE);
+    }
+
     // ------------------------------------------------------------------ at the target
 
     private void tickSettle() {
@@ -448,26 +570,29 @@ final class LootJob {
         if (phaseTicks < params.settleTicks) {
             return;
         }
-        rescan();
+        spots = new ArrayList<>(ContainerScan.scan(target.x, target.z, params.searchRadius, params.order,
+                params.lootTrapped, px(), py(), pz()));
+        spotIndex = 0;
         ep.containersFound = spots.size();
         if (spots.isEmpty()) {
             finishEpisode("no_containers", false);
-            idleFor(2);
             return;
         }
         note(spots.size() + " container(s) found at target " + target.id);
         shulkersBefore = countShulkers();
-        step = Step.PICK;
+        stepTo(Step.PICK);
         to(Phase.LOOT);
     }
 
-    private void rescan() {
-        spots = new ArrayList<>(ContainerScan.scan(target.x, target.z, params.searchRadius, params.order, px(), py(), pz()));
-        spotIndex = 0;
-    }
-
+    /** A stranger at the base (from the event, or anyone already standing there), or low health. */
     private boolean checkAbort() {
         String why = abortReason;
+        if (why == null && config.safety.abortOnPlayer) {
+            String name = strangerNear();
+            if (name != null) {
+                why = "player " + name + " nearby";
+            }
+        }
         if (why == null && health() <= config.safety.abortHealth) {
             why = "health " + (int) health();
         }
@@ -478,9 +603,33 @@ final class LootJob {
         stopMoving();
         closeContainer();
         ep.notes.add("aborted: " + why);
-        String outcome = why.startsWith("player") ? "aborted_player" : "aborted_health";
-        finishEpisode(outcome, config.home.set && !depositSlots().isEmpty());
+        String outcome = why.equals("disconnected") ? "disconnected"
+                : why.startsWith("player") ? "aborted_player" : "aborted_health";
+        finishEpisode(outcome, !why.equals("disconnected"));
         return true;
+    }
+
+    /** The name of a player in the entity cache who is not the bot, a friend or whitelisted. */
+    static String strangerNear() {
+        Map<UUID, com.zenith.cache.data.entity.EntityPlayer> players;
+        try {
+            players = new HashMap<>(CACHE.getEntityCache().getPlayers());
+        } catch (RuntimeException e) {
+            return null;
+        }
+        int self = CACHE.getPlayerCache().getEntityId();
+        for (var e : players.entrySet()) {
+            var p = e.getValue();
+            if (p == null || p.isSelfPlayer() || p.getEntityId() == self) {
+                continue;
+            }
+            UUID id = e.getKey();
+            if (id != null && (PLAYER_LISTS.getFriendsList().contains(id) || PLAYER_LISTS.getWhitelist().contains(id))) {
+                continue;
+            }
+            return CACHE.getTabListCache().get(id).map(entry -> entry.getName()).orElse("someone");
+        }
+        return null;
     }
 
     private void tickLoot() {
@@ -500,8 +649,18 @@ final class LootJob {
     }
 
     private void pickNext() {
+        if (containerOpen()) {
+            // Never click the next container while one is still open: what shows up must be the new one.
+            if (stepTicks % 10 == 1) {
+                closeContainer();
+            }
+            if (stepTicks > CLOSE_WAIT) {
+                stepTicks = 0;
+            }
+            return;
+        }
         if (Items.freeSlots() <= params.reserveSlots) {
-            finishEpisode(ep.containersOpened > 0 ? "full" : "no_room", config.home.set);
+            finishEpisode(ep.containersOpened > 0 ? "full" : "no_room", true);
             return;
         }
         if (ep.containersTried >= params.maxContainers) {
@@ -534,6 +693,7 @@ final class LootJob {
     }
 
     private void tickOpening() {
+        // Nothing was open when the click went out (pickNext waits for that), so an open container is this one.
         if (containerOpen()) {
             stepTo(Step.WAIT_OPEN);
             return;
@@ -552,23 +712,33 @@ final class LootJob {
         }
     }
 
+    /** The open container, once it is a real one with its contents in; null until then. */
+    private static Container openContainer() {
+        var cache = CACHE.getPlayerCache().getInventoryCache();
+        if (cache.getOpenContainerId() == 0) {
+            return null;
+        }
+        Container c = cache.getOpenContainer();
+        if (c == null || c.getContainerId() == 0 || c.getSize() <= 36) {
+            return null;
+        }
+        return c;
+    }
+
     private void tickWaitOpen() {
-        if (!containerOpen()) {
+        Container c = openContainer();
+        if (c == null || stepTicks < 6) {
             if (stepTicks > OPEN_WAIT) {
-                spotFailed("clicked but it did not open (blocked lid?)");
+                spotFailed(containerOpen() ? "it opened but its contents never came" : "clicked but it did not open (blocked lid?)");
             }
             return;
         }
-        if (stepTicks < 6) {
-            return; // its contents follow the open
-        }
-        takeFromOpen();
+        takeFrom(c);
     }
 
-    private void takeFromOpen() {
-        Container c = CACHE.getPlayerCache().getInventoryCache().getOpenContainer();
+    private void takeFrom(Container c) {
         int id = c.getContainerId();
-        int slots = Math.max(0, c.getSize() - 36);
+        int slots = c.getSize() - 36;
         List<int[]> picks = new ArrayList<>(); // {slot, rank}
         int items = 0;
         for (int i = 0; i < slots; i++) {
@@ -594,16 +764,15 @@ final class LootJob {
         }
         if (slots == 54) {
             ep.doubleChests++;
+            // The other half of a double chest is the same inventory: done too.
+            for (ContainerScan.Spot other : spots) {
+                if (other.kind() == spot.kind() && other.y() == spot.y()
+                        && Math.abs(other.x() - spot.x()) + Math.abs(other.z() - spot.z()) == 1) {
+                    finished.add(other.key());
+                }
+            }
         }
-        if (actions.isEmpty()) {
-            invRequest = null;
-            invActions = null;
-        } else {
-            invActions = actions;
-            invRequest = submit(actions);
-            ep.stacksTaken += actions.size();
-        }
-        finished.add(spot.key());
+        submitActions(actions);
         stepTo(Step.TAKING);
     }
 
@@ -625,42 +794,74 @@ final class LootJob {
                 .owner(this).actions(actions).priority(inventoryPriority).build());
     }
 
-    /** A refused inventory request (another module had the inventory) goes in again for a while. */
-    private boolean resubmitIfRefused() {
-        if (invRequest != null && invActions != null && invRequest.isDone() && !invRequest.isAccepted() && stepTicks < 40) {
-            invRequest = submit(invActions);
-            return true;
+    private void submitActions(List<InventoryAction> actions) {
+        if (actions.isEmpty()) {
+            invActions = null;
+            invRequest = null;
+            invWait = 0;
+            return;
         }
-        return false;
+        invActions = actions;
+        invRequest = submit(actions);
+        invWait = actions.size() * TICKS_PER_ACTION + 40;
+    }
+
+    /**
+     * Where the submitted clicks stand: 1 done, 0 still going, -1 refused for good. A refused request
+     * (another module had the inventory) goes in again for a while.
+     */
+    private int clicksState() {
+        if (invRequest == null) {
+            return 1;
+        }
+        if (invRequest.isDone()) {
+            if (invRequest.isAccepted()) {
+                return 1;
+            }
+            if (stepTicks < 60) {
+                invRequest = submit(invActions);
+                return 0;
+            }
+            return -1;
+        }
+        return stepTicks > invWait ? -1 : 0;
     }
 
     private void tickTaking() {
-        if (resubmitIfRefused()) {
+        int s = clicksState();
+        if (s == 0 || stepTicks < 8) {
             return;
         }
-        boolean done = invRequest == null || invRequest.isDone();
-        if (!done && stepTicks < TAKE_WAIT) {
+        if (s < 0) {
+            closeContainer();
+            spotFailed("the inventory clicks did not go through");
             return;
         }
-        if (stepTicks < 8) {
-            return;
+        if (invActions != null) {
+            ep.stacksTaken += invActions.size();
         }
+        finished.add(spot.key());
         closeContainer();
         stepTo(Step.CLOSING);
     }
 
     private void tickClosing() {
-        if (containerOpen() && stepTicks < 20) {
-            return;
+        if (containerOpen()) {
+            if (stepTicks % 10 == 0) {
+                closeContainer();
+            }
+            if (stepTicks < CLOSE_WAIT) {
+                return;
+            }
         }
         spotIndex++;
-        stepTo(Step.PICK);
+        stepTo(Step.PICK); // PICK waits for a container still open
     }
 
     private void tickBreaking() {
         if (!ContainerScan.stillThere(spot)) {
             stopMoving();
-            pathing = BARITONE.pickup();
+            pathing = BARITONE.pickup(SHULKER_BOXES);
             stepTo(Step.PICKUP);
             return;
         }
@@ -684,9 +885,11 @@ final class LootJob {
             stepTo(Step.PICK);
             return;
         }
-        if (stepTicks > PICKUP_WAIT || (pathing != null && pathing.isDone() && stepTicks > 40)) {
+        double dx = px() - spot.x() - 0.5, dz = pz() - spot.z() - 0.5;
+        boolean wandered = dx * dx + dz * dz > PICKUP_RANGE * PICKUP_RANGE;
+        if (wandered || stepTicks > PICKUP_WAIT || (pathing != null && pathing.isDone() && stepTicks > 40)) {
             stopMoving();
-            ep.failures.add(failure("broke the shulker box but did not pick it up"));
+            ep.failures.add(failure(wandered ? "the broken shulker box was out of reach" : "broke the shulker box but did not pick it up"));
             finished.add(spot.key());
             spotIndex++;
             stepTo(Step.PICK);
@@ -718,28 +921,42 @@ final class LootJob {
     private void endTarget(String why) {
         ep.notes.add(why);
         boolean took = !ep.lootSoFar().isEmpty();
-        boolean goHome = config.home.set && Items.freeSlots() <= Math.max(params.reserveSlots + 4, 6);
+        boolean goHome = Items.freeSlots() <= Math.max(params.reserveSlots + 4, 6);
         finishEpisode(took ? "looted" : (ep.containersOpened > 0 ? "empty" : "unreachable"), goHome);
     }
 
     // ------------------------------------------------------------------ home
 
+    /** Home to unload, only when there is a home, a saved kit (so gear is never unloaded) and loot. */
+    private boolean goHome() {
+        if (!config.home.set || config.kit.isEmpty() || depositSlots().isEmpty()
+                || System.currentTimeMillis() < homeBlockedUntil) {
+            return false;
+        }
+        startTravel(config.home.x, config.home.z, 4);
+        to(Phase.HOME);
+        return true;
+    }
+
     private void tickHome() {
-        int s = travelState();
+        int s = health() <= config.safety.abortHealth ? -1 : travelState();
         if (s == 0) {
             return;
         }
         if (s < 0) {
-            note("could not get home to unload");
+            stopTravel();
+            homeBlockedUntil = System.currentTimeMillis() + 30 * 60_000L;
+            note("could not get home to unload; trying again in 30 minutes");
             learner.event(botName.get(), "home_failed", "could not get home from " + (int) px() + ", " + (int) pz());
             idleFor(30);
             return;
         }
-        homeSpots = new ArrayList<>(ContainerScan.scan(config.home.x, config.home.z, config.home.radius, "nearest", px(), py(), pz()));
+        homeSpots = new ArrayList<>(ContainerScan.scan(config.home.x, config.home.z, config.home.radius, "nearest",
+                false, px(), py(), pz()));
         homeSpots.removeIf(sp -> sp.kind() == ContainerScan.Kind.SHULKER);
         homeIndex = 0;
         deposited = 0;
-        step = Step.PICK;
+        stepTo(Step.PICK);
         to(Phase.DEPOSIT);
     }
 
@@ -747,11 +964,20 @@ final class LootJob {
         stepTicks++;
         switch (step) {
             case PICK -> {
+                if (containerOpen()) {
+                    if (stepTicks % 10 == 1) {
+                        closeContainer();
+                    }
+                    if (stepTicks > CLOSE_WAIT) {
+                        stepTicks = 0;
+                    }
+                    return;
+                }
                 if (depositSlots().isEmpty() || homeIndex >= homeSpots.size()) {
                     boolean left = !depositSlots().isEmpty();
                     String msg = "unloaded " + deposited + " stack(s) at home" + (left ? "; the containers there are full" : "");
                     if (left) {
-                        homeFullUntil = System.currentTimeMillis() + 30 * 60_000L;
+                        homeBlockedUntil = System.currentTimeMillis() + 30 * 60_000L;
                     }
                     note(msg);
                     learner.event(botName.get(), "deposit", msg);
@@ -772,18 +998,15 @@ final class LootJob {
                 }
             }
             case WAIT_OPEN -> {
-                if (!containerOpen()) {
+                Container c = openContainer();
+                if (c == null || stepTicks < 6) {
                     if (stepTicks > OPEN_WAIT) {
                         homeIndex++;
                         stepTo(Step.PICK);
                     }
                     return;
                 }
-                if (stepTicks < 6) {
-                    return;
-                }
-                Container c = CACHE.getPlayerCache().getInventoryCache().getOpenContainer();
-                int slots = Math.max(0, c.getSize() - 36);
+                int slots = c.getSize() - 36;
                 int room = 0;
                 for (int i = 0; i < slots; i++) {
                     if (Items.blank(c.getItemStack(i))) {
@@ -797,25 +1020,29 @@ final class LootJob {
                     }
                     actions.add(new ShiftClick(c.getContainerId(), slots + (inv - Items.FIRST), ShiftClickItemAction.LEFT_CLICK));
                 }
-                deposited += actions.size();
-                invActions = actions.isEmpty() ? null : actions;
-                invRequest = actions.isEmpty() ? null : submit(actions);
+                submitActions(actions);
                 stepTo(Step.TAKING);
             }
             case TAKING -> {
-                if (resubmitIfRefused()) {
+                int s = clicksState();
+                if (s == 0 || stepTicks < 8) {
                     return;
                 }
-                if ((invRequest != null && !invRequest.isDone() && stepTicks < TAKE_WAIT) || stepTicks < 8) {
-                    return;
+                if (s > 0 && invActions != null) {
+                    deposited += invActions.size();
                 }
                 closeContainer();
                 homeIndex++;
                 stepTo(Step.CLOSING);
             }
             case CLOSING -> {
-                if (containerOpen() && stepTicks < 20) {
-                    return;
+                if (containerOpen()) {
+                    if (stepTicks % 10 == 0) {
+                        closeContainer();
+                    }
+                    if (stepTicks < CLOSE_WAIT) {
+                        return;
+                    }
                 }
                 stepTo(Step.PICK);
             }
@@ -823,10 +1050,16 @@ final class LootJob {
         }
     }
 
-    /** Inventory slots (9-44) holding loot: everything beyond the kit counts saved with 'loot kit'. */
+    /**
+     * Inventory slots (9-44) holding nothing but loot. A stack is kept while the kit count for its
+     * item is not yet reached, even when loot has been merged into it: gear is never unloaded.
+     */
     private List<Integer> depositSlots() {
         Map<String, Integer> kept = new HashMap<>();
         List<Integer> out = new ArrayList<>();
+        if (config.kit.isEmpty()) {
+            return out; // no kit saved: everything might be gear
+        }
         for (int c = Items.FIRST; c <= Items.LAST; c++) {
             ItemStack s = Items.stackAt(c);
             if (Items.blank(s)) {
@@ -835,7 +1068,7 @@ final class LootJob {
             String n = Items.name(s);
             int allowed = config.kit.getOrDefault(n, 0);
             int have = kept.getOrDefault(n, 0);
-            if (have + s.getAmount() <= allowed) {
+            if (have < allowed) {
                 kept.put(n, have + s.getAmount());
             } else {
                 out.add(c);
@@ -853,15 +1086,11 @@ final class LootJob {
         stopMoving();
         closeContainer();
         ep.outcome = outcome;
-        JsonObject json = ep.toJson(botName.get(), BuildConstants.VERSION);
-        learner.report(json);
+        learner.report(ep.toJson(botName.get(), BuildConstants.VERSION));
         String loot = ep.lootSummary();
         note("target " + target.id + ": " + outcome + (loot.isEmpty() ? "" : " (" + loot + ")"));
         ep = null;
-        if (goHome && config.home.set && config.active) {
-            startTravel(config.home.x, config.home.z, 4);
-            to(Phase.HOME);
-        } else if (phase != Phase.OFF) {
+        if (!(goHome && config.active && goHome())) {
             idleFor(2);
         }
     }
@@ -904,7 +1133,7 @@ final class LootJob {
     private void closeContainer() {
         if (containerOpen()) {
             INVENTORY.submit(InventoryActionRequest.builder().owner(this)
-                    .actions(List.of(new CloseContainer())).priority(inventoryPriority).build());
+                    .actions(List.of(new CloseContainer())).priority(inventoryPriority + 1).build());
         }
     }
 
@@ -980,26 +1209,18 @@ final class LootJob {
         return phase;
     }
 
+    /** Read from the command thread: only the volatile fields and the inventory cache. */
     String statusLine() {
-        StringBuilder sb = new StringBuilder(phase.name().toLowerCase(Locale.ROOT));
-        if ((phase == Phase.LOOT || phase == Phase.DEPOSIT) && step != null) {
-            sb.append(" (").append(step.name().toLowerCase(Locale.ROOT).replace('_', ' ')).append(")");
-        }
-        if (target != null && phase != Phase.IDLE && phase != Phase.OFF) {
-            sb.append("; target ").append(target.id).append(" at ").append(target.x).append(", ").append(target.z);
-        }
-        if (phase == Phase.LOOT) {
-            sb.append("; container ").append(Math.min(spotIndex + 1, spots.size())).append(" of ").append(spots.size());
-        }
-        if (ep != null) {
-            String loot = ep.lootSummary();
-            if (!loot.isEmpty()) {
-                sb.append("; taken so far: ").append(loot);
-            }
+        Phase p = phase;
+        StringBuilder sb = new StringBuilder(p.name().toLowerCase(Locale.ROOT));
+        LearnerClient.Target t = target;
+        if (t != null && p != Phase.IDLE && p != Phase.OFF && p != Phase.ASKING) {
+            sb.append("; target ").append(t.id).append(" at ").append(t.x).append(", ").append(t.z);
         }
         sb.append("; ").append(Items.freeSlots()).append(" free slots; version ").append(BuildConstants.VERSION);
-        if (!lastNote.isEmpty()) {
-            sb.append("\nLast: ").append(lastNote);
+        String last = lastNote;
+        if (!last.isEmpty()) {
+            sb.append("\nLast: ").append(last);
         }
         return sb.toString();
     }
