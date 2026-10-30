@@ -93,8 +93,8 @@ def pick(db, bot, state, now=None):
     def score(t):
         d = math.hypot(t["x"] - bx, t["z"] - bz)
         fresh = 1.15 if t["attempts"] == 0 else 1.0
-        # GridFly's own score for the spot (netherite and shulkers count most), dampened.
-        worth = 1.0 + math.log1p(max(0.0, t.get("weight") or 0.0)) / 4.0
+        # The spot's worth from its source (GridFly's score, a Discord find's priority), dampened.
+        worth = 1.0 + math.log1p(max(0.0, t.get("weight") or 0.0)) / 2.0
         return odds.get(t["source"], 0.5) * fresh * worth / (1.0 + d / 3000.0)
 
     best = max(rows, key=score)

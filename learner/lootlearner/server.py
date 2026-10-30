@@ -19,7 +19,7 @@ import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import gridfly, reports, targets
+from . import findsbot, gridfly, reports, targets
 from .db import DB
 from .deploy import Deployer
 from .tuner import Tuner, load_space
@@ -31,6 +31,8 @@ DEFAULT_CONFIG = {
     "botToken": "",
     "operatorToken": "",
     "github": {"repo": "", "token": "", "pollMinutes": 30, "reportsBranch": "reports", "reportHours": 6},
+    # The team's Discord finds bot (the one Revive's Finds module reads): its address and shared key.
+    "findsBot": {"url": "", "key": "", "syncMinutes": 5, "markVisited": True},
     # The GridFly server's operator websocket, e.g. ws://1.2.3.4:25600/ui, and its operator token.
     "gridfly": {"url": "", "token": "", "syncMinutes": 30, "limit": 300, "minScore": 0, "markLooted": True},
     "canary": {"bots": [], "episodes": 8, "minRatio": 0.85, "silentMinutes": 120},
@@ -74,6 +76,7 @@ class Learner:
         self.tuner = Tuner(self.db, space or load_space(), min_episodes=int(tcfg.get("minEpisodes", 4)),
                            explore=float(tcfg.get("explore", 0.25)), rng=rng)
         self.deployer = Deployer(self.db, self.data_dir / "jars", self.config, log=log)
+        self.findsbot = findsbot.Sync(self.db, self.config.setdefault("findsBot", dict(DEFAULT_CONFIG["findsBot"])), log=log)
         self.gridfly = gridfly.Sync(self.db, self.config.setdefault("gridfly", dict(DEFAULT_CONFIG["gridfly"])), log=log)
 
     # -- bot calls
@@ -121,7 +124,7 @@ class Learner:
             top = sorted((ep.get("items") or {}).items(), key=lambda kv: -self.values.item(kv[0]) * kv[1])[:5]
             took = ", ".join(f"{n} {k.replace('in:', '')}" for k, n in top)
             gridfly.queue_looted(self.db, ep["targetId"],
-                                 f"LootBot ({ep.get('bot')}): " + (f"took {took}" if took else "nothing worth taking"))
+                                 f"LootBot ({ep.get('bot')}): " + (f"took {took}" if took else "nothing left worth taking"))
         return {"ok": True, "value": round(value, 1), "reward": round(reward, 1), "target": status}
 
     # -- the background loop
@@ -134,6 +137,11 @@ class Learner:
             self._last_poll = now
             self.deployer.poll_github()
         self.deployer.evaluate(now)
+        if self.findsbot.due(now):
+            try:
+                self.findsbot.run(now)
+            except Exception as e:
+                self.log(f"Discord finds sync failed: {e}")
         if self.gridfly.due(now):
             try:
                 self.gridfly.run(now)

@@ -7,6 +7,7 @@
   targets gridfly <gridfly.db> [--source S]   stashes from a copy of the GridFly server's database
   targets list [--status S]
   report [--publish]             write data/reports/latest.md (and push it when --publish)
+  finds sync                     take targets from the Discord finds bot now (and mark visited ones)
   gridfly sync                   take targets from the GridFly server's finds now (and send looted marks)
 """
 
@@ -41,6 +42,8 @@ def main(argv=None):
     g.add_argument("--source", default="gridfly")
     ls = tsub.add_parser("list")
     ls.add_argument("--status")
+    fs = sub.add_parser("finds")
+    fs.add_argument("fcmd", choices=["sync"])
     gf = sub.add_parser("gridfly")
     gf.add_argument("gcmd", choices=["sync"])
     r = sub.add_parser("report")
@@ -68,6 +71,12 @@ def main(argv=None):
                 sql, q = sql + " WHERE status = ?", (args.status,)
             for row in learner.db.all(sql + " ORDER BY id", q):
                 print(json.dumps(row))
+        return 0
+    if args.cmd == "finds":
+        if not learner.config.get("findsBot", {}).get("url"):
+            print("Set findsBot.url (the finds bot, e.g. http://1.2.3.4:8790) and findsBot.key in config.json first")
+            return 1
+        learner.findsbot.run()
         return 0
     if args.cmd == "gridfly":
         if not learner.config.get("gridfly", {}).get("url"):

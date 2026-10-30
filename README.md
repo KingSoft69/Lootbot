@@ -42,7 +42,23 @@ systemctl enable --now lootlearner
 
 Port 25700 should only be open to the droplets the bots run on (`ufw allow from <ip> to any port 25700`).
 
-### Targets from GridFly's finds
+### Targets from the Discord finds
+
+The learner reads the team's #search-finds posts through the same finds bot Revive's Finds module
+uses, every 5 minutes. Every open find becomes a target; High and Moderate finds are visited ahead
+of closer Low ones, and a find someone marks visited (or closes) on Discord leaves the queue. When a
+bot has been through a find, the learner marks it visited on Discord ("Visited by LootBot (<bot>):
+took ...") and the thread closes, as the Finds module's Visited button does. In `data/config.json`,
+with the same address and key you put in Revive's Finds module:
+
+```
+"findsBot": {"url": "http://<finds bot>:8790", "key": "<shared key>", "syncMinutes": 5, "markVisited": true}
+```
+
+`python3 -m lootlearner --data /root/lootbot/data finds sync` runs a sync straight away. Find
+coordinates are overworld, so bots take these targets in the overworld.
+
+### Targets from GridFly's finds (optional)
 
 The learner logs in to the GridFly server like the command app does and takes the best unlooted
 spots from the finds (shulker boxes, chest and barrel groups, netherite blocks; spots with only signs,

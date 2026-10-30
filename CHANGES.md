@@ -2,6 +2,13 @@
 
 Newest first. Each entry: what changed, the evidence for it, and what result would show it worked.
 
+## Learner: targets from the Discord finds
+
+The learner takes targets from the Discord finds bot (the one Revive's Finds module reads) every
+5 minutes, drops finds that get closed on Discord, puts High and Moderate finds first, and marks a
+find visited on Discord once a bot has been through it. Needs `findsBot.url` and `findsBot.key` in
+the learner's config; restart the learner to pick it up.
+
 ## Learner: targets from GridFly
 
 The learner takes targets from the GridFly server's finds (best unlooted spots with containers)

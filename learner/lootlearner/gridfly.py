@@ -223,7 +223,7 @@ def import_sites(db, sites, min_score=0.0):
 
 
 def queue_looted(db, target_id, note):
-    """Remembers that a GridFly spot was looted; the next sync tells the GridFly server."""
+    """Remembers that a spot from GridFly or Discord was looted; the next sync of its source says so there."""
     t = db.one("SELECT ext_ids FROM targets WHERE id = ?", (target_id,))
     if not t or not t["ext_ids"] or t["ext_ids"] == "[]":
         return False
@@ -249,7 +249,8 @@ class Sync:
         try:
             marked = 0
             if self.config.get("markLooted", True):
-                for t in self.db.all("SELECT id, ext_ids, ext_pending FROM targets WHERE ext_pending IS NOT NULL"):
+                for t in self.db.all("SELECT id, ext_ids, ext_pending FROM targets WHERE ext_pending IS NOT NULL "
+                                     "AND ext_key NOT LIKE 'discord:%'"):
                     client.set_looted(json.loads(t["ext_ids"]), t["ext_pending"])
                     with self.db.tx() as c:
                         c.execute("UPDATE targets SET ext_pending = NULL WHERE id = ?", (t["id"],))
