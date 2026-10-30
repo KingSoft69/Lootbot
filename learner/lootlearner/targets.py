@@ -51,6 +51,21 @@ def import_csv(db, path, source="import"):
     return n
 
 
+def import_gridfly(db, path, source="gridfly"):
+    """Stashes from a copy of a GridFly server's database (its stashes table)."""
+    import sqlite3
+
+    src = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    try:
+        rows = src.execute("SELECT id, dim, x, y, z FROM stashes WHERE x IS NOT NULL AND z IS NOT NULL").fetchall()
+    finally:
+        src.close()
+    dims = {"overworld": "overworld", "nether": "nether", "the_nether": "nether", "end": "end", "the_end": "end"}
+    for sid, dim, x, y, z in rows:
+        add(db, x, z, y, dims.get(str(dim or "overworld").lower(), "overworld"), f"stash {sid}", source)
+    return len(rows)
+
+
 def source_odds(db):
     """Per source, the chance a visit found loot (a Beta(1, 1) prior, so new sources start at even)."""
     rows = db.all(

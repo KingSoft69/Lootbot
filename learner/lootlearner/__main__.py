@@ -4,6 +4,7 @@
   tokens                         print the bot and operator tokens
   targets add <x> <z> [--y Y] [--dim D] [--label L] [--source S]
   targets import <file.csv> [--source S]
+  targets gridfly <gridfly.db> [--source S]   stashes from a copy of the GridFly server's database
   targets list [--status S]
   report [--publish]             write data/reports/latest.md (and push it when --publish)
 """
@@ -34,6 +35,9 @@ def main(argv=None):
     i = tsub.add_parser("import")
     i.add_argument("file")
     i.add_argument("--source", default="import")
+    g = tsub.add_parser("gridfly")
+    g.add_argument("file")
+    g.add_argument("--source", default="gridfly")
     ls = tsub.add_parser("list")
     ls.add_argument("--status")
     r = sub.add_parser("report")
@@ -53,6 +57,8 @@ def main(argv=None):
             print(f"target {targets.add(learner.db, args.x, args.z, args.y, args.dim, args.label, args.source)}")
         elif args.tcmd == "import":
             print(f"{targets.import_csv(learner.db, args.file, args.source)} target(s) read")
+        elif args.tcmd == "gridfly":
+            print(f"{targets.import_gridfly(learner.db, args.file, args.source)} stash(es) read")
         else:
             sql, q = "SELECT id, x, z, dim, status, attempts, last_outcome, label FROM targets", ()
             if args.status:

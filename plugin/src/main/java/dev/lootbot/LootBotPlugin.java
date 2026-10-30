@@ -9,7 +9,7 @@ import net.kyori.adventure.text.logger.slf4j.ComponentLogger;
     id = BuildConstants.PLUGIN_ID,
     version = BuildConstants.VERSION,
     description = "Loots known bases handed out by the LootBot learner and reports each visit back to it",
-    url = "https://github.com/111111111111111113/LootBot",
+    url = "https://github.com/KingSoft69/LootBot",
     authors = {"LootBot"},
     mcVersions = {BuildConstants.MC_VERSION}
 )

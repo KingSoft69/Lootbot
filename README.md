@@ -31,7 +31,7 @@ git clone <this repo> /root/lootbot && cd /root/lootbot/learner
 python3 -m lootlearner --data /root/lootbot/data tokens     # makes data/config.json, prints the tokens
 ```
 
-In `data/config.json` set `github.repo` (owner/LootBot) and `github.token`: a fine-grained token
+In `data/config.json` set `github.repo` (KingSoft69/LootBot) and `github.token`: a fine-grained token
 with Contents read and write on this repository only. It lets the learner download releases and
 push the reports the review loop reads. Then run it under systemd:
 
@@ -46,7 +46,8 @@ Targets, by hand or from a CSV with `x,z` columns (and optional `y`, `dim`, `lab
 
 ```
 python3 -m lootlearner --data /root/lootbot/data targets add 120000 -45000 --label "stash" --source finds
-python3 -m lootlearner --data /root/lootbot/data targets import finds.csv --source gridfly
+python3 -m lootlearner --data /root/lootbot/data targets import finds.csv --source finds
+python3 -m lootlearner --data /root/lootbot/data targets gridfly gridfly-copy.db   # GridFly's stashes
 python3 -m lootlearner --data /root/lootbot/data report
 ```
 

@@ -93,6 +93,18 @@ class LearnerTest(unittest.TestCase):
         self.assertEqual(targets.import_csv(self.learner.db, p), 2)
         self.assertEqual(targets.counts(self.learner.db), {"open": 2})
 
+    def test_gridfly_import(self):
+        import sqlite3
+        p = Path(self.tmp.name) / "gridfly.db"
+        src = sqlite3.connect(p)
+        src.execute("CREATE TABLE stashes (id TEXT PRIMARY KEY, dim TEXT NOT NULL, x INTEGER, y INTEGER, z INTEGER)")
+        src.executemany("INSERT INTO stashes VALUES (?, ?, ?, ?, ?)", [("a", "OVERWORLD", 1, 64, 2), ("b", "NETHER", 3, 100, 4)])
+        src.commit()
+        src.close()
+        self.assertEqual(targets.import_gridfly(self.learner.db, p), 2)
+        dims = {r["dim"] for r in self.learner.db.all("SELECT dim FROM targets")}
+        self.assertEqual(dims, {"overworld", "nether"})
+
     def test_tuner_climbs_toward_better_settings(self):
         """Simulated bases where bigger searchRadius and maxContainers pay off, with heavy noise."""
         rng = random.Random(7)
