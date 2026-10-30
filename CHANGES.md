@@ -2,6 +2,12 @@
 
 Newest first. Each entry: what changed, the evidence for it, and what result would show it worked.
 
+## Learner: targets from GridFly
+
+The learner takes targets from the GridFly server's finds (best unlooted spots with containers)
+every 30 minutes and marks spots looted on GridFly once a bot has been through them. Needs
+`gridfly.url` and `gridfly.token` in the learner's config; restart the learner to pick it up.
+
 ## 0.1.0
 
 First version. Loots containers at targets from the learner (chests, barrels,

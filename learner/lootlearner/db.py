@@ -60,6 +60,12 @@ class DB:
         self.lock = threading.RLock()
         with self.tx() as c:
             c.executescript(SCHEMA)
+            # Columns added after the first version.
+            have = {r[1] for r in c.execute("PRAGMA table_info(targets)").fetchall()}
+            for col, decl in (("ext_key", "TEXT"), ("ext_ids", "TEXT"), ("ext_pending", "TEXT"), ("weight", "REAL")):
+                if col not in have:
+                    c.execute(f"ALTER TABLE targets ADD COLUMN {col} {decl}")
+            c.execute("CREATE INDEX IF NOT EXISTS targets_ext ON targets (ext_key)")
 
     def conn(self):
         c = getattr(self._local, "conn", None)

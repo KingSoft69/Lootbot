@@ -19,7 +19,7 @@ import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import reports, targets
+from . import gridfly, reports, targets
 from .db import DB
 from .deploy import Deployer
 from .tuner import Tuner, load_space
@@ -31,6 +31,8 @@ DEFAULT_CONFIG = {
     "botToken": "",
     "operatorToken": "",
     "github": {"repo": "", "token": "", "pollMinutes": 30, "reportsBranch": "reports", "reportHours": 6},
+    # The GridFly server's operator websocket, e.g. ws://1.2.3.4:25600/ui, and its operator token.
+    "gridfly": {"url": "", "token": "", "syncMinutes": 30, "limit": 300, "minScore": 0, "markLooted": True},
     "canary": {"bots": [], "episodes": 8, "minRatio": 0.85, "silentMinutes": 120},
     "tuner": {"minEpisodes": 4, "explore": 0.25},
     "idleRetrySeconds": 120,
@@ -72,6 +74,7 @@ class Learner:
         self.tuner = Tuner(self.db, space or load_space(), min_episodes=int(tcfg.get("minEpisodes", 4)),
                            explore=float(tcfg.get("explore", 0.25)), rng=rng)
         self.deployer = Deployer(self.db, self.data_dir / "jars", self.config, log=log)
+        self.gridfly = gridfly.Sync(self.db, self.config.setdefault("gridfly", dict(DEFAULT_CONFIG["gridfly"])), log=log)
 
     # -- bot calls
 
@@ -114,6 +117,11 @@ class Learner:
                  value, reward, json.dumps(ep), time.time()),
             )
         status = targets.record(self.db, ep.get("targetId"), ep.get("outcome"), value, more_left=more_left)
+        if status in ("done", "empty") and ep.get("targetId") is not None:
+            top = sorted((ep.get("items") or {}).items(), key=lambda kv: -self.values.item(kv[0]) * kv[1])[:5]
+            took = ", ".join(f"{n} {k.replace('in:', '')}" for k, n in top)
+            gridfly.queue_looted(self.db, ep["targetId"],
+                                 f"LootBot ({ep.get('bot')}): " + (f"took {took}" if took else "nothing worth taking"))
         return {"ok": True, "value": round(value, 1), "reward": round(reward, 1), "target": status}
 
     # -- the background loop
@@ -126,6 +134,11 @@ class Learner:
             self._last_poll = now
             self.deployer.poll_github()
         self.deployer.evaluate(now)
+        if self.gridfly.due(now):
+            try:
+                self.gridfly.run(now)
+            except Exception as e:
+                self.log(f"GridFly sync failed: {e}")
         if now - getattr(self, "_last_report", 0) >= float(gh.get("reportHours", 6)) * 3600:
             self._last_report = now
             self.write_report(publish=True)

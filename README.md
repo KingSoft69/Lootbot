@@ -42,7 +42,25 @@ systemctl enable --now lootlearner
 
 Port 25700 should only be open to the droplets the bots run on (`ufw allow from <ip> to any port 25700`).
 
-Targets, by hand or from a CSV with `x,z` columns (and optional `y`, `dim`, `label`, `source`):
+### Targets from GridFly's finds
+
+The learner logs in to the GridFly server like the command app does and takes the best unlooted
+spots from the finds (shulker boxes, chest and barrel groups, netherite blocks; spots with only signs,
+pearls or gateways are skipped) every 30 minutes. When a bot has been through a spot, its finds are
+marked looted on GridFly with a note of what was taken, so the map and the Discord posts show it.
+In `data/config.json`:
+
+```
+"gridfly": {"url": "ws://<gridfly server>:25600/ui", "token": "<operator token>", "syncMinutes": 30,
+            "limit": 300, "minScore": 0, "markLooted": true}
+```
+
+The operator token is the one `gridfly-server --print-tokens` shows (use `wss://` when the server is
+behind TLS). `python3 -m lootlearner --data /root/lootbot/data gridfly sync` runs a sync straight away.
+The learner keeps track of which kind of find (shulkers, chests, netherite) actually pays and visits
+those first, and GridFly's own score for a spot counts too.
+
+Other targets, by hand or from a CSV with `x,z` columns (and optional `y`, `dim`, `label`, `source`):
 
 ```
 python3 -m lootlearner --data /root/lootbot/data targets add 120000 -45000 --label "stash" --source finds

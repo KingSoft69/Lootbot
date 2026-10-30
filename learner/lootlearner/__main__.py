@@ -7,6 +7,7 @@
   targets gridfly <gridfly.db> [--source S]   stashes from a copy of the GridFly server's database
   targets list [--status S]
   report [--publish]             write data/reports/latest.md (and push it when --publish)
+  gridfly sync                   take targets from the GridFly server's finds now (and send looted marks)
 """
 
 import argparse
@@ -40,6 +41,8 @@ def main(argv=None):
     g.add_argument("--source", default="gridfly")
     ls = tsub.add_parser("list")
     ls.add_argument("--status")
+    gf = sub.add_parser("gridfly")
+    gf.add_argument("gcmd", choices=["sync"])
     r = sub.add_parser("report")
     r.add_argument("--publish", action="store_true")
     args = p.parse_args(argv)
@@ -65,6 +68,12 @@ def main(argv=None):
                 sql, q = sql + " WHERE status = ?", (args.status,)
             for row in learner.db.all(sql + " ORDER BY id", q):
                 print(json.dumps(row))
+        return 0
+    if args.cmd == "gridfly":
+        if not learner.config.get("gridfly", {}).get("url"):
+            print("Set gridfly.url (ws://<gridfly server>:25600/ui) and gridfly.token (its operator token) in config.json first")
+            return 1
+        learner.gridfly.run()
         return 0
     if args.cmd == "report":
         sys.stdout.write(learner.write_report(publish=args.publish))
